@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -23,17 +23,16 @@ along with RailControl; see the file LICENCE. If not see
 #include <map>
 #include <string>
 
-namespace DataModel {
-
-	class Serializable {
+namespace DataModel
+{
+	class Serializable
+	{
 		public:
 			virtual ~Serializable() {};
 			virtual std::string Serialize() const = 0;
-			virtual bool Deserialize(const std::string& serialized) = 0;
+			virtual void Deserialize(const std::string& serialized) = 0;
 
 		protected:
 			static void ParseArguments(const std::string& serialized, std::map<std::string,std::string>& arguments);
 	};
-
 } // namespace DataModel
-

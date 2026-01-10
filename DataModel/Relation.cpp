@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -46,7 +46,7 @@ namespace DataModel
 		return ss.str();
 	}
 
-	bool Relation::Deserialize(const std::string& serialized)
+	void Relation::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
@@ -58,7 +58,6 @@ namespace DataModel
 		object2.SetObjectID(static_cast<ObjectID>(Utils::Utils::GetIntegerMapEntry(arguments, "objectID2")));
 		priority = Utils::Utils::GetIntegerMapEntry(arguments, "priority");
 		data = Utils::Utils::GetIntegerMapEntry(arguments, "data");
-		return true;
 	}
 
 	bool Relation::Execute(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier, const Delay delay)
@@ -68,7 +67,7 @@ namespace DataModel
 			case ObjectTypeAccessory:
 			{
 				bool ret = manager->AccessoryState(ControlTypeInternal, ObjectID2(), static_cast<AccessoryState>(data), true);
-				if (ret == false)
+				if (!ret)
 				{
 					return false;
 				}
@@ -78,7 +77,7 @@ namespace DataModel
 			case ObjectTypeSwitch:
 			{
 				bool ret = manager->SwitchState(ControlTypeInternal, ObjectID2(), static_cast<AccessoryState>(data), true);
-				if (ret == false)
+				if (!ret)
 				{
 					return false;
 				}
@@ -88,7 +87,7 @@ namespace DataModel
 			case ObjectTypeSignal:
 			{
 				bool ret = manager->SignalState(ControlTypeInternal, ObjectID2(), static_cast<AccessoryState>(data), true);
-				if (ret == false)
+				if (!ret)
 				{
 					return false;
 				}
@@ -130,6 +129,9 @@ namespace DataModel
 				manager->Booster(ControlTypeInternal, static_cast<BoosterState>(data));
 				return true;
 
+			case ObjectTypeCounter:
+				return manager->Count(ObjectID2(), static_cast<CounterType>(data));
+
 			default:
 				return false;
 		}
@@ -137,7 +139,7 @@ namespace DataModel
 		return true;
 	}
 
-	LockableItem* Relation::GetObject2()
+	Object* Relation::GetObject2()
 	{
 		switch (ObjectType2())
 		{
@@ -156,6 +158,9 @@ namespace DataModel
 			case ObjectTypeRoute:
 				return manager->GetRoute(ObjectID2());
 
+			case ObjectTypeCounter:
+				return manager->GetCounter(ObjectID2());
+
 			default:
 				return nullptr;
 		}
@@ -163,24 +168,40 @@ namespace DataModel
 
 	bool Relation::Reserve(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
-		bool ret = LockableItem::Reserve(logger, locoBaseIdentifier);
-		if (ret == false)
+		const bool ret = LockableItem::Reserve(logger, locoBaseIdentifier);
+		if (!ret)
 		{
 			logger->Debug(Languages::TextUnableToReserve);
 			return false;
 		}
 
 		const ObjectType objectType2 = ObjectType2();
-		if (objectType2 == ObjectTypeLoco
-			|| objectType2 == ObjectTypePause
-			|| objectType2 == ObjectTypeMultipleUnit
-			|| objectType2 == ObjectTypeBooster)
+		switch(objectType2)
 		{
-			return true;
+			case ObjectTypeLoco:
+			case ObjectTypePause:
+			case ObjectTypeMultipleUnit: // abused for loco orientation
+			case ObjectTypeBooster:
+				return true;
+
+			case ObjectTypeCounter:
+			{
+				Counter* counter = manager->GetCounter(ObjectID2());
+				if (!counter)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					LockableItem::Release(logger, locoBaseIdentifier);
+					return false;
+				}
+				return counter->CheckCount(static_cast<CounterType>(data));
+			}
+
+			default:
+				break;
 		}
 
-		LockableItem* lockable = GetObject2();
-		if (lockable == nullptr)
+		LockableItem* lockable = dynamic_cast<LockableItem*>(GetObject2());
+		if (!lockable)
 		{
 			logger->Debug(Languages::TextRelationTargetNotFound);
 			LockableItem::Release(logger, locoBaseIdentifier);
@@ -188,7 +209,7 @@ namespace DataModel
 		}
 
 		Route* route = dynamic_cast<Route*>(lockable);
-		if (route != nullptr)
+		if (route)
 		{
 			return route->Reserve(logger, locoBaseIdentifier);
 		}
@@ -198,42 +219,58 @@ namespace DataModel
 
 	bool Relation::Lock(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
-		bool ret = LockableItem::Lock(logger, locoBaseIdentifier);
-		if (ret == false)
+		const bool ret = LockableItem::Lock(logger, locoBaseIdentifier);
+		if (!ret)
 		{
 			return false;
 		}
 
 		const ObjectType objectType2 = ObjectType2();
-		if (objectType2 == ObjectTypeLoco
-			|| objectType2 == ObjectTypePause
-			|| objectType2 == ObjectTypeMultipleUnit
-			|| objectType2 == ObjectTypeBooster)
+		switch(objectType2)
 		{
-			return true;
+			case ObjectTypeLoco:
+			case ObjectTypePause:
+			case ObjectTypeMultipleUnit: // abused for loco orientation
+			case ObjectTypeBooster:
+				return true;
+
+			case ObjectTypeCounter:
+			{
+				Counter* counter = manager->GetCounter(ObjectID2());
+				if (!counter)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					LockableItem::Release(logger, locoBaseIdentifier);
+					return false;
+				}
+				return counter->CheckCount(static_cast<CounterType>(data));
+			}
+
+			default:
+				break;
 		}
 
-		LockableItem* lockable = GetObject2();
-		if (lockable == nullptr)
+		LockableItem* lockable = dynamic_cast<LockableItem*>(GetObject2());
+		if (!lockable)
 		{
 			LockableItem::Release(logger, locoBaseIdentifier);
 			return false;
 		}
 
 		Route* route = dynamic_cast<Route*>(lockable);
-		if (route != nullptr)
+		if (route)
 		{
 			return route->Lock(logger, locoBaseIdentifier);
 		}
 
-		bool retLockable = lockable->Lock(logger, locoBaseIdentifier);
-		if (retLockable == true)
+		const bool retLockable = lockable->Lock(logger, locoBaseIdentifier);
+		if (retLockable)
 		{
 			return true;
 		}
 
-		Object* object = dynamic_cast<Object*>(lockable);
-		if (object == nullptr)
+		const Object* object = dynamic_cast<Object*>(lockable);
+		if (!object)
 		{
 			return false;
 		}
@@ -242,12 +279,89 @@ namespace DataModel
 		return false;
 	}
 
+	bool Relation::CheckCondition(Logger::Logger* logger, __attribute__((unused)) const ObjectIdentifier& locoBaseIdentifier)
+	{
+		const ObjectType objectType2 = ObjectType2();
+		switch(objectType2)
+		{
+			case ObjectTypeAccessory:
+			{
+				Accessory* accessory = manager->GetAccessory(ObjectID2());
+				if (!accessory)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					return false;
+				}
+				const bool state = accessory->CheckState(static_cast<AccessoryState>(data));
+				if (state)
+				{
+					return true;
+				}
+				break;
+			}
+
+			case ObjectTypeSwitch:
+			{
+				Switch* mySwitch = manager->GetSwitch(ObjectID2());
+				if (!mySwitch)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					return false;
+				}
+				const bool state = mySwitch->CheckState(static_cast<AccessoryState>(data));
+				if (state)
+				{
+					return true;
+				}
+				break;
+			}
+
+			case ObjectTypeSignal:
+			{
+				Signal* signal = manager->GetSignal(ObjectID2());
+				if (!signal)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					return false;
+				}
+				const bool state = signal->CheckState(static_cast<AccessoryState>(data));
+				if (state)
+				{
+					return true;
+				}
+				break;
+			}
+
+			case ObjectTypeFeedback:
+			{
+				Feedback* feedback = manager->GetFeedback(ObjectID2());
+				if (!feedback)
+				{
+					logger->Debug(Languages::TextRelationTargetNotFound);
+					return false;
+				}
+				const bool state = feedback->CheckState(static_cast<Feedback::FeedbackState>(data));
+				if (state)
+				{
+					return true;
+				}
+				break;
+			}
+
+			default:
+				return true;
+		}
+
+		logger->Debug(Languages::TextConditionsNotFulfilled);
+		return false;
+	}
+
 	bool Relation::Release(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
-		LockableItem* object = GetObject2();
-		if (object != nullptr)
+		LockableItem* lockable = dynamic_cast<LockableItem*>(GetObject2());
+		if (lockable)
 		{
-			object->Release(logger, locoBaseIdentifier);
+			lockable->Release(logger, locoBaseIdentifier);
 		}
 		return LockableItem::Release(logger, locoBaseIdentifier);
 	}

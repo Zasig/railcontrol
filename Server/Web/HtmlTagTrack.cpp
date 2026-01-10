@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -33,26 +33,22 @@ namespace Server { namespace Web
 	HtmlTagTrack::HtmlTagTrack(const Manager& manager, const DataModel::Track* track)
 	:	HtmlTagLayoutItem(dynamic_cast<const DataModel::LayoutItem*>(track))
 	{
-		const bool occupied = track->GetFeedbackStateDelayed() == DataModel::Feedback::FeedbackStateOccupied;
+		const bool occupied = track->GetMainStateDelayed() == DataModel::Feedback::FeedbackStateOccupied;
 
-		const ObjectIdentifier locoBaseIdentifier = track->GetLocoBaseDelayed();
+		const ObjectIdentifier locoBaseIdentifier = track->GetMainLocoBaseDelayed();
 		const bool reserved = locoBaseIdentifier.IsSet();
 
-		const bool blocked = track->GetBlocked();
-
-		if (layout->GetObjectType() != ObjectTypeTrack)
-		{
-			return;
-		}
+		const bool blocked = track->GetMainBlocked();
 
 		onClickMenuDiv.AddClass(reserved ? "loco_known" : "loco_unknown");
 		onClickMenuDiv.AddClass(blocked ? "track_blocked" : "track_unblocked");
-		onClickMenuDiv.AddClass(track->GetLocoOrientation() == OrientationRight ? "orientation_right" : "orientation_left");
+		onClickMenuDiv.AddClass(track->GetLocoBaseOrientation() == OrientationRight ? "orientation_right" : "orientation_left");
 
-		const string& trackName = track->GetName();
+		const string& trackName = track->GetMainName();
 		AddOnClickMenuEntry(trackName);
 		AddContextMenuEntry(trackName);
-		urlIdentifier = "track=" + to_string(layout->GetID());
+		const string urlIdentifier = "track=" + to_string(track->GetID());
+		const string urlMainIdentifier = "track=" + to_string(track->GetMainID());
 
 		imageDiv.AddClass("track_item");
 		string trackClass;
@@ -103,21 +99,18 @@ namespace Server { namespace Web
 			}
 
 			case DataModel::TrackTypeTunnel:
+			{
 				image = "<polygon class=\"track\" points=\"15,0 21,0 21,12 15,12\"/>"
 					"<polygon class=\"track\" points=\"5,1 10,1 10,10 12,12 24,12 26,10 26,1 31,1 31,3 28,3 28,11 25,14 11,14 8,11 8,3 5,3 \"/>";
-				#include "Fallthrough.h"
-				// no break
+				const int lengthPixel = EdgeLength * trackHeight;
+				TunnelEnd(layoutHeight, lengthPixel);
+				break;
+			}
 
 			case DataModel::TrackTypeTunnelEnd:
 			{
-				const string l14 = to_string(EdgeLength * trackHeight - 14);
-				const string l12 = to_string(EdgeLength * trackHeight - 12);
-				const string l11 = to_string(EdgeLength * trackHeight - 11);
-				const string l10 = to_string(EdgeLength * trackHeight - 10);
-				const string l3 = to_string(EdgeLength * trackHeight - 3);
-				const string l1 = to_string(EdgeLength * trackHeight - 1);
-				image += "<polygon class=\"track\" points=\"15," + l12 + " 21," + l12 + " 21," + layoutHeight + " 15," + layoutHeight + "\"/>"
-					"<polygon class=\"track\" points=\"5," + l1 + " 10," + l1 + " 10," + l10 + " 12," + l12 + " 24," + l12 + " 26," + l10 + " 26," + l1 + " 31," + l1 + " 31," + l3 + " 28," + l3 + " 28," + l11 + " 25," + l14 + " 11," + l14 + " 8," + l11 + " 8," + l3 + " 5," + l3 + "\"/>";
+				const int lengthPixel = EdgeLength * trackHeight - 20;
+				TunnelEnd(layoutHeight, lengthPixel);
 				break;
 			}
 
@@ -141,25 +134,32 @@ namespace Server { namespace Web
 			case DataModel::TrackTypeStraight:
 			default:
 				image = "<polygon class=\"track\" points=\"15,0 21,0 21," + layoutHeight + " 15," + layoutHeight + "\"/>";
-				const string& orientationSign = track->GetLocoOrientation() == OrientationRight ? "&rarr; " : "&larr; ";
-				const string& locoName = reserved ? orientationSign + manager.GetLocoBaseName(locoBaseIdentifier) : "";
 				const string textPositionX = to_string(EdgeLength * trackHeight - 1);
-				image += "<text class=\"loconame\" x=\"-" + textPositionX + "\" y=\"11\" id=\"" + identifier + "_text_loconame\" transform=\"rotate(270 0,0)\" font-size=\"14\">" + locoName + "</text>";
+				if (!track->GetMain())
+				{
+					string locoName;
+					if (reserved)
+					{
+						const string& orientationSign = track->GetMainLocoOrientation() == OrientationRight ? "&rarr; " : "&larr; ";
+						locoName = orientationSign + manager.GetLocoBaseName(locoBaseIdentifier);
+					}
+					image += "<text class=\"loconame\" x=\"-" + textPositionX + "\" y=\"11\" id=\"" + identifier + "_text_loconame\" transform=\"rotate(270 0,0)\">" + locoName + "</text>";
+				}
 				if (track->GetShowName())
 				{
-					const string& displayName = track->GetDisplayName();
-					image += "<text class=\"trackname\" x=\"-" + textPositionX + "\" y=\"33\" id=\"" + identifier + "_text_trackname\" transform=\"rotate(270 0,0)\" font-size=\"14\">" + (displayName.size() ? displayName : trackName) + "</text>";
+					const string& displayName = track->GetMainDisplayName();
+					image += "<text class=\"trackname\" x=\"-" + textPositionX + "\" y=\"33\" id=\"" + identifier + "_text_trackname\" transform=\"rotate(270 0,0)\">" + (displayName.size() ? displayName : trackName) + "</text>";
 				}
 				break;
 		}
 
 		imageDiv.AddAttribute("onclick", "return onClickWithMenu(event, '" + identifier + "');");
-		AddOnClickMenuEntry(Languages::TextBlockTrack, "fireRequestAndForget('/?cmd=trackblock&" + urlIdentifier + "&blocked=true');", "track_block");
-		AddOnClickMenuEntry(Languages::TextUnblockTrack, "fireRequestAndForget('/?cmd=trackblock&" + urlIdentifier + "&blocked=false');", "track_unblock");
-		AddOnClickMenuEntry(Languages::TextTurnDirectionOfTravelToLeft, "fireRequestAndForget('/?cmd=trackorientation&orientation=false&" + urlIdentifier + "');", "track_left");
-		AddOnClickMenuEntry(Languages::TextTurnDirectionOfTravelToRight, "fireRequestAndForget('/?cmd=trackorientation&orientation=true&" + urlIdentifier + "');", "track_right");
-		AddOnClickMenuEntry(Languages::TextSetLoco, "loadPopup('/?cmd=tracksetloco&" + urlIdentifier + "');", "track_set");
-		AddOnClickMenuEntry(Languages::TextStartLocoAutomode, "fireRequestAndForget('/?cmd=trackstartloco&" + urlIdentifier + "');", "track_start_loco");
+		AddOnClickMenuEntry(Languages::TextBlockTrack, "fireRequestAndForget('/?cmd=trackblock&" + urlMainIdentifier + "&blocked=true');", "track_block");
+		AddOnClickMenuEntry(Languages::TextUnblockTrack, "fireRequestAndForget('/?cmd=trackblock&" + urlMainIdentifier + "&blocked=false');", "track_unblock");
+		AddOnClickMenuEntry(Languages::TextTurnDirectionOfTravelToLeft, "fireRequestAndForget('/?cmd=trackorientation&orientation=false&" + urlMainIdentifier + "');", "track_left");
+		AddOnClickMenuEntry(Languages::TextTurnDirectionOfTravelToRight, "fireRequestAndForget('/?cmd=trackorientation&orientation=true&" + urlMainIdentifier + "');", "track_right");
+		AddOnClickMenuEntry(Languages::TextSetLoco, "loadPopup('/?cmd=tracksetloco&" + urlMainIdentifier + "');", "track_set");
+		AddOnClickMenuEntry(Languages::TextStartLocoAutomode, "fireRequestAndForget('/?cmd=trackstartloco&" + urlMainIdentifier + "');", "track_start_loco");
 
 		const std::string trackId = std::to_string(track->GetID());
 		const std::vector<const DataModel::Route*> routes = track->GetRoutes();
@@ -170,13 +170,25 @@ namespace Server { namespace Web
 			AddOnClickMenuEntry(route->GetName() + " & " + Languages::GetText(Languages::TextAutomode), cmd + "automode');", "track_start_loco");
 		}
 
-		AddOnClickMenuEntry(Languages::TextStopLoco, "fireRequestAndForget('/?cmd=trackstoploco&" + urlIdentifier + "');", "track_stop_loco");
+		AddOnClickMenuEntry(Languages::TextStopLoco, "fireRequestAndForget('/?cmd=trackstoploco&" + urlMainIdentifier + "');", "track_stop_loco");
 
-		AddContextMenuEntry(Languages::TextReleaseTrack, "fireRequestAndForget('/?cmd=trackrelease&" + urlIdentifier + "');", "track_release");
-		AddContextMenuEntry(Languages::TextReleaseTrackAndLoco, "fireRequestAndForget('/?cmd=locorelease&" + urlIdentifier + "');", "track_loco_release");
+		AddContextMenuEntry(Languages::TextReleaseTrack, "fireRequestAndForget('/?cmd=trackrelease&" + urlMainIdentifier + "');", "track_release");
+		AddContextMenuEntry(Languages::TextReleaseTrackAndLoco, "fireRequestAndForget('/?cmd=locorelease&" + urlMainIdentifier + "');", "track_loco_release");
 		AddContextMenuEntry(Languages::TextEditTrack, "loadPopup('/?cmd=trackedit&" + urlIdentifier + "');");
 		AddContextMenuEntry(Languages::TextDeleteTrack, "loadPopup('/?cmd=trackaskdelete&" + urlIdentifier + "');");
-		AddToolTip(track->GetName());
+		AddToolTip(trackName);
 		FinishInit();
+	}
+
+	void HtmlTagTrack::TunnelEnd(const string& layoutHeight, const unsigned int lengthPixel)
+	{
+		const string l14 = to_string(lengthPixel - 14);
+		const string l12 = to_string(lengthPixel - 12);
+		const string l11 = to_string(lengthPixel - 11);
+		const string l10 = to_string(lengthPixel - 10);
+		const string l3 = to_string(lengthPixel - 3);
+		const string l1 = to_string(lengthPixel - 1);
+		image += "<polygon class=\"track\" points=\"15," + l12 + " 21," + l12 + " 21," + layoutHeight + " 15," + layoutHeight + "\"/>"
+			"<polygon class=\"track\" points=\"5," + l1 + " 10," + l1 + " 10," + l10 + " 12," + l12 + " 24," + l12 + " 26," + l10 + " 26," + l1 + " 31," + l1 + " 31," + l3 + " 28," + l3 + " 28," + l11 + " 25," + l14 + " 11," + l14 + " 8," + l11 + " 8," + l3 + " 5," + l3 + "\"/>";
 	}
 }} // namespace Server::Web

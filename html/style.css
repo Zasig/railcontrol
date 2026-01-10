@@ -1,7 +1,7 @@
 body {
 	background-color: black;
 	color: white;
-	font-family: verdana, sans-serif;
+	font-family: Arial, Helvetica, sans-serif;
 	font-size: 15px;
 	margin: 0px;
 }
@@ -73,7 +73,7 @@ body {
 	width: 110px;
 }
 
-@media (max-width: 649px) {
+@media (max-width: 615px) {
 	.menu_config,
 	.menu_config_visible,
 	.menu_add,
@@ -82,7 +82,7 @@ body {
 	}
 }
 
-@media (min-width: 650px) and (max-width: 999px) {
+@media (min-width: 616px) and (max-width: 1023px) {
 	.menu_config {
 		display: none;
 	}
@@ -103,7 +103,7 @@ body {
 	}
 }
 
-@media (min-width: 1000px) {
+@media (min-width: 1024px) {
 	.menu_add,
 	.menu_config,
 	.menu_config_visible {
@@ -256,12 +256,26 @@ body {
 .layout_item .tooltip {
 	top: 32px;
 	left: 32px;
+	white-space: nowrap;
+}
+
+.help {
+	background-color: yellow;
+	border: solid 1px black;
+	border-radius: 1em;
+	font-size: 12px;
+	display: inline-block;
+}
+
+.help .tooltip {
+	display: block;
+	font-size: 15px;
 }
 
 .button .tooltip,
+.help .tooltip,
 .layout_item .tooltip {
 	line-height: 1;
-	white-space: nowrap;
 	visibility: hidden;
 	background-color: yellow;
 	color: black;
@@ -273,11 +287,13 @@ body {
 }
 
 .button:hover .tooltip,
+.help:hover .tooltip,
 .layout_item:hover .tooltip {
 	visibility: visible;
 }
 
 .accessory_item .track,
+.counter_item .track,
 .feedback_item .track {
 	fill: white;
 }
@@ -422,9 +438,12 @@ body {
 	display: none;
 }
 
+.counter,
 .text_item,
+.loconame,
 .trackname {
 	fill: white;
+	font-size: 14px;
 }
 
 .popup {
@@ -509,6 +528,11 @@ input {
 	width: calc(100% - 10px);
 }
 
+.select_relation_id,
+.select_relation_id .dropdown {
+	width: 250px;
+}
+
 .select_feedback,
 .select_feedback .dropdown,
 .select_track,
@@ -516,23 +540,17 @@ input {
 	width: 160px;
 }
 
-.select_delay,
-.select_delay .dropdown,
-.select_orientation,
-.select_orientation .dropdown {
-	width: 80px;
-}
-
 .select_relation_objecttype,
 .select_relation_objecttype .dropdown {
 	width: 100px;
 }
 
-.select_relation_id,
-.select_relation_id .dropdown {
-	width: 250px;
-}
-
+.select_delay,
+.select_delay .dropdown,
+.select_orientation,
+.select_orientation .dropdown,
+.select_port,
+.select_port .dropdown,
 .select_relation_state,
 .select_relation_state .dropdown {
 	width: 80px;
@@ -720,7 +738,9 @@ button:active {
 .button_off .orientation_right,
 .button_on .orientation_left,
 .button_off .button_on,
-.button_on .button_off {
+.button_on .button_off,
+.accessory_off .accessory_on,
+.accessory_on .accessory_off {
 	display: none;
 	visibility: hidden;
 }

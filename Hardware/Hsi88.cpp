@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -88,7 +88,7 @@ namespace Hardware
 	std::string Hsi88::ReadUntilCR()
 	{
 		std::string data;
-		unsigned char input = 0;
+		unsigned char input;
 		while (true)
 		{
 			int ret = serialLine.Receive(&input, sizeof(input), 1, 0);
@@ -97,7 +97,7 @@ namespace Hardware
 				logger->HexIn(data);
 				return data;
 			}
-			data.append(reinterpret_cast<char*>(&input), ret);
+			data.append(reinterpret_cast<char*>(&input));
 		}
 	}
 

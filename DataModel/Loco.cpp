@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -41,16 +41,16 @@ namespace DataModel
 		return str;
 	}
 
-	bool Loco::Deserialize(const std::string& serialized)
+	void Loco::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
-		if (!arguments.count("objectType") || arguments.at("objectType").compare("Loco") != 0)
+		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
+		if (objectType.compare("Loco") != 0)
 		{
-			return false;
+			return;
 		}
 		LocoBase::Deserialize(arguments);
-		return true;
 	}
 
 	Loco& Loco::operator=(const Hardware::LocoCacheEntry& loco)

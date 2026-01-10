@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -51,6 +51,7 @@ namespace Hardware
 		CapabilityMultipleUnitDatabase         = 0x00100000,
 		CapabilityAccessoryDatabase            = 0x00200000,
 		CapabilityFeedbackDatabase             = 0x00400000,
+		CapabilityFeedbackDeviceBus            = 0x00800000,
 	};
 
 	inline Capabilities operator& (const Capabilities c1, const Capabilities c2)

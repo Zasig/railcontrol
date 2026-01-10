@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -35,34 +35,39 @@ namespace DataModel
 		str += AccessoryBase::Serialize();
 		str += ";" + LayoutItem::Serialize();
 		str += ";" + LockableItem::Serialize();
+		str += ";port=" + std::to_string(port);
 		return str;
 	}
 
-	bool Accessory::Deserialize(const std::string& serialized)
+	void Accessory::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
 		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
 		if (objectType.compare("Accessory") != 0)
 		{
-			return false;
+			return;
 		}
 		AccessoryBase::Deserialize(arguments);
 		LayoutItem::Deserialize(arguments);
 		LockableItem::Deserialize(arguments);
+		port = static_cast<AddressPort>(Utils::Utils::GetIntegerMapEntry(arguments, "port"));
 		SetWidth(Width1);
 		SetHeight(Height1);
 		SetVisible(VisibleYes);
-		return true;
 	}
 
 	Accessory& Accessory::operator=(const Hardware::AccessoryCacheEntry& accessory)
 	{
 		SetControlID(accessory.GetControlID());
 		SetName(accessory.GetName());
-		SetAddress(accessory.GetAddress());
 		SetProtocol(accessory.GetProtocol());
+		SetAddress(accessory.GetAddress());
+		SetPort(AddressPortRed);
 		SetMatchKey(accessory.GetMatchKey());
+		SetWidth(Width1);
+		SetHeight(Height1);
+		SetVisible(VisibleYes);
 		return *this;
 	}
 } // namespace DataModel

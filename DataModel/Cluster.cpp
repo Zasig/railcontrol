@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -19,12 +19,10 @@ along with RailControl; see the file LICENCE. If not see
 */
 
 #include <map>
-#include <string>
 
 #include "DataModel/Cluster.h"
 #include "DataModel/LockableItem.h"
 #include "DataModel/Relation.h"
-#include "DataModel/Signal.h"
 #include "DataModel/Track.h"
 #include "Manager.h"
 #include "Utils/Utils.h"
@@ -45,22 +43,21 @@ namespace DataModel
 		return str;
 	}
 
-	bool Cluster::Deserialize(const string& serialized)
+	void Cluster::Deserialize(const string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
+		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
+		if (objectType.compare("Cluster") != 0)
+		{
+			return;
+		}
 		Object::Deserialize(arguments);
-		if (!arguments.count("objectType") || arguments.at("objectType").compare("Cluster") != 0)
-		{
-			return false;
-		}
 		orientation = static_cast<Orientation>(Utils::Utils::GetBoolMapEntry(arguments, "orientation", OrientationRight));
-		return true;
 	}
 
-	bool Cluster::CanSetLocoBaseOrientation(const Orientation orientation, const ObjectIdentifier& locoBaseIdentifier)
+	bool Cluster::CanSetLocoBaseOrientationUnlocked(const Orientation orientation, const ObjectIdentifier& locoBaseIdentifier)
 	{
-		std::lock_guard<std::mutex> Guard(orientationMutex);
 		if (this->orientation == orientation)
 		{
 			return true;
@@ -68,48 +65,55 @@ namespace DataModel
 		for (auto relation : tracks)
 		{
 			Track* track = dynamic_cast<Track*>(relation->GetObject2());
-			if (track == nullptr)
+			if (!track)
 			{
 				return false;
 			}
-			if (track->GetLockState() == DataModel::LockableItem::LockStateFree)
+
+			// invert track orientation if needed (XOR) and check with desired orientation value
+			const Relation::Data invert = relation->GetData();
+			if ((track->GetLocoBaseOrientation() ^ invert) == orientation)
 			{
 				continue;
 			}
-			if (track->GetLocoBase() == locoBaseIdentifier)
+
+			const DataModel::LockableItem::LockState lockState = track->GetLockState();
+			if (lockState == DataModel::LockableItem::LockStateFree)
 			{
 				continue;
 			}
+
+			const ObjectIdentifier& locoBaseOfTrack = track->GetLocoBase();
+			if ((lockState == DataModel::LockableItem::LockStateReserved) && locoBaseOfTrack.IsSet() && (locoBaseOfTrack == locoBaseIdentifier))
+			{
+				continue;
+			}
+
 			return false;
 		}
 		return true;
 	}
 
-	bool Cluster::SetLocoBaseOrientation(const Orientation orientation, const ObjectIdentifier& locoBaseIdentifier)
+	bool Cluster::SetLocoBaseOrientation(const Orientation orientation,
+		const ObjectIdentifier& locoBaseIdentifier)
 	{
 		std::lock_guard<std::mutex> Guard(orientationMutex);
-		if (this->orientation == orientation)
+		if (!CanSetLocoBaseOrientationUnlocked(orientation, locoBaseIdentifier))
 		{
-			return true;
-		}
-		for (auto relation : tracks)
-		{
-			Track* track = dynamic_cast<Track*>(relation->GetObject2());
-			if (track == nullptr)
-			{
-				return false;
-			}
-			if (track->GetLockState() == DataModel::LockableItem::LockStateFree)
-			{
-				continue;
-			}
-			if (track->GetLocoBase() == locoBaseIdentifier)
-			{
-				continue;
-			}
 			return false;
 		}
 		this->orientation = orientation;
+		for (auto relation : tracks)
+		{
+			Track* track = dynamic_cast<Track*>(relation->GetObject2());
+			if (!track)
+			{
+				continue;
+			}
+			// invert orientation if needed (XOR) and set track orientation
+			const Relation::Data invert = relation->GetData();
+			track->SetLocoBaseOrientationForce(static_cast<Orientation>(orientation ^ invert));
+		}
 		return true;
 	}
 
@@ -118,10 +122,10 @@ namespace DataModel
 		while (tracks.size() > 0)
 		{
 			Relation* trackRelation = tracks.back();
-			Track* track = dynamic_cast<Track*>(trackRelation->GetObject2());
-			if (track != nullptr)
+			Track* track = trackRelation->ObjectType2() == ObjectTypeTrack ? manager->GetTrack(trackRelation->ObjectID2()) : nullptr;
+			if (track)
 			{
-				track->SetCluster(nullptr);
+				track->DeleteCluster();
 			}
 			tracks.pop_back();
 			delete trackRelation;
@@ -138,7 +142,7 @@ namespace DataModel
 			}
 			delete tracks[index];
 			tracks.erase(tracks.begin() + index);
-			trackToDelete->SetCluster(nullptr);
+			trackToDelete->DeleteCluster();
 			return;
 		}
 	}
@@ -150,9 +154,9 @@ namespace DataModel
 		for (auto trackRelation : tracks)
 		{
 			Track* track = dynamic_cast<Track*>(trackRelation->GetObject2());
-			if (track != nullptr)
+			if (track)
 			{
-				track->SetCluster(this);
+				track->SetCluster(this, static_cast<bool>(trackRelation->GetData()));
 			}
 		}
 	}

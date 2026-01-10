@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -50,6 +50,11 @@ namespace Server { namespace Web
 			void Stop() override;
 
 			void Work(Network::TcpConnection* connection) override;
+
+			void Warning(__attribute__((unused)) Languages::TextSelector textSelector)
+			{
+				AddUpdate("warning", textSelector);
+			}
 
 			bool NextUpdate(unsigned int& updateIDClient, std::string& s);
 
@@ -121,8 +126,11 @@ namespace Server { namespace Web
 			void SignalState(const ControlType controlType, const DataModel::Signal* signal) override;
 			void ClusterDelete(const ClusterID clusterID, const std::string& name) override;
 			void ClusterSettings(const ClusterID clusterID, const std::string& name) override;
-			void TextDelete(const ClusterID clusterID, const std::string& name) override;
-			void TextSettings(const ClusterID clusterID, const std::string& name) override;
+			void TextDelete(const TextID textID, const std::string& name) override;
+			void TextSettings(const TextID textID, const std::string& name) override;
+			void CounterDelete(const CounterID counterID, const std::string& name) override;
+			void CounterSettings(const CounterID counterID, const std::string& name) override;
+			void CounterState(const DataModel::Counter* const counter);
 			void ProgramValue(const CvNumber cv, const CvValue value) override;
 
 			inline bool UpdateAvailable()
@@ -144,7 +152,12 @@ namespace Server { namespace Web
 
 			inline void AddUpdate(const std::string& command, const std::string& status)
 			{
-				AddUpdate("data: command=" + command + ";status=" + status + "\r\n\r\n");
+				AddUpdateInternal("data: command=" + command + ";status=" + status + "\r\n\r\n");
+			}
+
+			inline void AddUpdate(const std::string& command)
+			{
+				AddUpdateInternal("data: command=" + command + "\r\n\r\n");
 			}
 
 			inline void AddUpdate(const Languages::TextSelector status)
@@ -152,7 +165,7 @@ namespace Server { namespace Web
 				AddUpdate(std::string("data: status=") + Languages::GetText(status) + "\r\n\r\n");
 			}
 
-			void AddUpdate(const std::string& data);
+			void AddUpdateInternal(const std::string& data);
 
 			void LogBrowserInfo(const std::string& webserveraddress, const unsigned short port);
 

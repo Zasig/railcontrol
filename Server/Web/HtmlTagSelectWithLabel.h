@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -54,12 +54,38 @@ namespace Server { namespace Web
 			template<typename T>
 			HtmlTagSelectWithLabel(const std::string& name,
 				const Languages::TextSelector label,
+				const Languages::TextSelector hint,
+				const std::map<std::string,T>& options,
+				const int defaultValue = 0)
+			:	HtmlTag("div")
+			{
+				HtmlTag::AddClass("input_select_with_label");
+				AddChildTag(HtmlTagLabel(label, hint, "s_" + name));
+				AddChildTag(HtmlTagSelect(name, options, defaultValue));
+			}
+
+			template<typename T>
+			HtmlTagSelectWithLabel(const std::string& name,
+				const Languages::TextSelector label,
 				const std::map<T,Languages::TextSelector>& options,
 				const T defaultValue = 0)
 			:	HtmlTag("div")
 			{
 				HtmlTag::AddClass("input_select_with_label");
 				AddChildTag(HtmlTagLabel(label, "s_" + name));
+				AddChildTag(HtmlTagSelect(name, options, defaultValue));
+			}
+
+			template<typename T>
+			HtmlTagSelectWithLabel(const std::string& name,
+				const Languages::TextSelector label,
+				const Languages::TextSelector hint,
+				const std::map<T,Languages::TextSelector>& options,
+				const T defaultValue = 0)
+			:	HtmlTag("div")
+			{
+				HtmlTag::AddClass("input_select_with_label");
+				AddChildTag(HtmlTagLabel(label, hint, "s_" + name));
 				AddChildTag(HtmlTagSelect(name, options, defaultValue));
 			}
 

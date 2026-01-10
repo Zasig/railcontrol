@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -68,7 +68,9 @@ namespace Server { namespace Web
 		AddUpdate(Languages::TextRailControlStarted);
 
 		LogBrowserInfo(webserveraddress, port);
+#ifndef NOUPDATECHECK
 		updateAvailable = Utils::Network::HostResolves(GetVersionInfoGitHash() + ".hash.railcontrol.org");
+#endif
 	}
 
 	WebServer::~WebServer()
@@ -91,7 +93,7 @@ namespace Server { namespace Web
 
 	void WebServer::Stop()
 	{
-		AddUpdate(Languages::TextStoppingRailControl);
+		AddUpdate(Languages::TextShutdownRailControl);
 		TerminateTcpServer();
 		// stopping all clients
 		for (auto client : clients)
@@ -327,13 +329,13 @@ namespace Server { namespace Web
 
 	void WebServer::TrackState(const DataModel::Track* track)
 	{
-		const LocoBase* locoBase = manager.GetLocoBase(track->GetLocoBaseDelayed());
+		const LocoBase* locoBase = manager.GetLocoBase(track->GetMainLocoBaseDelayed());
 		const bool reserved = locoBase != nullptr;
-		const string& trackName = track->GetName();
+		const string& trackName = track->GetMainName();
 		const string& locoName = reserved ? locoBase->GetName() : "";
-		const bool occupied = track->GetFeedbackStateDelayed() == DataModel::Feedback::FeedbackStateOccupied;
-		const bool blocked = track->GetBlocked();
-		const Orientation orientation = track->GetLocoOrientation();
+		const bool occupied = track->GetMainStateDelayed() == DataModel::Feedback::FeedbackStateOccupied;
+		const bool blocked = track->GetMainBlocked();
+		const Orientation orientation = track->GetMainLocoOrientation();
 		const string occupiedText = (occupied ? "true" : "false");
 		const string blockedText = (blocked ? "true" : "false");
 		const string reservedText = (reserved ? "true" : "false");
@@ -346,7 +348,11 @@ namespace Server { namespace Web
 			+ ";orientation=" + orientationText
 			+ ";loconame=" + locoName;
 
-		if (blocked)
+		if (track->GetMain())
+		{
+			AddUpdate(command);
+		}
+		else if (blocked)
 		{
 			if (reserved)
 			{
@@ -564,6 +570,24 @@ namespace Server { namespace Web
 		AddUpdate(command, Languages::TextTextDeleted, name);
 	}
 
+	void WebServer::CounterSettings(const CounterID counterID, const std::string& name)
+	{
+		const string command = "countersettings;counter=" + to_string(counterID);
+		AddUpdate(command, Languages::TextCounterUpdated, name);
+	}
+
+	void WebServer::CounterDelete(const CounterID counterID, const std::string& name)
+	{
+		const string command = "counterdelete;counter=" + to_string(counterID);
+		AddUpdate(command, Languages::TextCounterDeleted, name);
+	}
+
+	void WebServer::CounterState(const DataModel::Counter* const counter)
+	{
+		const string command ="counterstate;counter=" + to_string(counter->GetID()) + ";count=" + to_string(counter->GetCounter());
+		AddUpdate(command, Languages::TextCounterUpdated, counter->GetName());
+	}
+
 	void WebServer::LocoBaseRelease(const DataModel::LocoBase* loco)
 	{
 		string command("locorelease;loco=");
@@ -662,7 +686,7 @@ namespace Server { namespace Web
 		AddUpdate(command.str(), Languages::TextProgramReadValue , static_cast<int>(cv), static_cast<int>(value));
 	}
 
-	void WebServer::AddUpdate(const string& data)
+	void WebServer::AddUpdateInternal(const string& data)
 	{
 		std::lock_guard<std::mutex> lock(updateMutex);
 		updates[updateID] = data;

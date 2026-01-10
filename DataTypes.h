@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -43,7 +43,9 @@ typedef ObjectID AccessoryID;
 
 // feedback
 typedef ObjectID FeedbackID;
-typedef uint32_t FeedbackPin;
+typedef uint32_t FeedbackPin;    // FIXME: 2025-11-02 can be changed to uint16_t later
+typedef uint32_t FeedbackDevice; // FIXME: 2025-11-02 can be changed to uint8_t later
+typedef uint32_t FeedbackBus;    // FIXME: 2025-11-02 can be changed to uint8_t later
 
 // track
 typedef ObjectID TrackID;
@@ -60,15 +62,19 @@ typedef ObjectID RouteID;
 typedef uint16_t Delay;
 
 // layer
-typedef int16_t LayerID;
+typedef int32_t LayerID;
 
 // relations
 typedef uint16_t Priority;
 
+// pause
 typedef uint8_t Pause;
 
 // text
 typedef ObjectID TextID;
+
+// counter
+typedef ObjectID CounterID;
 
 static const Address AddressNone = 0;
 static const Address AddressDefault = 3;
@@ -79,6 +85,10 @@ static const ObjectID ObjectNone = 0;
 static const AccessoryID AccessoryNone = 0;
 static const FeedbackID FeedbackNone = 0;
 static const FeedbackPin FeedbackPinNone = 0;
+static const FeedbackPin FeedbackPinMin = 1;
+static const FeedbackPin FeedbackPinMax = 512;
+static const FeedbackDevice FeedbackDeviceNone = 0;
+static const FeedbackBus FeedbackBusNone = 0;
 static const TrackID TrackNone = 0;
 static const SwitchID SwitchNone = 0;
 static const RouteID RouteNone = 0;
@@ -90,6 +100,7 @@ static const LayerID LayerUndeletable = 1;
 static const SignalID SignalNone = 0;
 static const ClusterID ClusterNone = 0;
 static const TextID TextNone = 0;
+static const CounterID CounterNone = 0;
 
 static const Speed MaxSpeed = 1023;
 static const Speed DefaultTravelSpeed = 700;
@@ -167,6 +178,12 @@ enum AddressType : uint8_t
 	AddressTypeAccessory
 };
 
+enum AddressPort : uint8_t
+{
+	AddressPortRed   = 0,
+	AddressPortGreen = 1
+};
+
 enum LocoType : uint8_t
 {
 	LocoTypeLoco = 0,
@@ -178,7 +195,7 @@ enum ArgumentType : uint8_t
 	ArgumentTypeIpAddress = 1,
 	ArgumentTypeSerialPort = 2,
 	ArgumentTypeS88Modules = 3,
-	ArgumentTypeMasterSlave = 4
+	ArgumentTypeMainSecundary = 4
 };
 
 enum HardwareType : uint8_t
@@ -232,7 +249,8 @@ enum ObjectType : uint8_t
 	ObjectTypeText = 11,
 	ObjectTypePause = 12,
 	ObjectTypeMultipleUnit = 13,
-	ObjectTypeBooster = 14
+	ObjectTypeBooster = 14,
+	ObjectTypeCounter = 15
 };
 
 enum Orientation : uint8_t

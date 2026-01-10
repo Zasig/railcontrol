@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -42,7 +42,7 @@ namespace Network
 
 	int TcpConnection::Send(const unsigned char* buffer, const size_t bufferLength, const int flags) const
 	{
-		if (connectionSocket == 0 || connected == false)
+		if (connectionSocket == 0 || !connected)
 		{
 			errno = ENOTCONN;
 			return -1;
@@ -134,6 +134,7 @@ namespace Network
 			int ret = Receive(data + actualSize, endSize - actualSize, flags);
 			if (ret <= 0)
 			{
+				// FIXME: Why not -1 ?
 				return actualSize;
 			}
 			actualSize += ret;

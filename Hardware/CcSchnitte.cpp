@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -45,11 +45,13 @@ namespace Hardware
 	{
 		if (!serialLine.IsConnected())
 		{
+			SetCommunicationError();
 			return;
 		}
 		if (serialLine.Send(buffer, CANCommandBufferLength) == -1)
 		{
 			HardwareInterface::logger->Error(Languages::TextUnableToSendDataToControl);
+			SetCommunicationError();
 		}
 	}
 
@@ -60,10 +62,11 @@ namespace Hardware
 			if (!serialLine.IsConnected())
 			{
 				HardwareInterface::logger->Error(Languages::TextUnableToReceiveData);
+				SetCommunicationError();
 				return;
 			}
 			unsigned char buffer[CANCommandBufferLength];
-			ssize_t datalen = serialLine.ReceiveExact(buffer, sizeof(buffer));
+			ssize_t datalen = serialLine.ReceiveExact(buffer, CANCommandBufferLength);
 			if (!run)
 			{
 				break;
@@ -73,9 +76,10 @@ namespace Hardware
 				// no data received
 				continue;
 			}
-			if (datalen != sizeof(buffer))
+			if (datalen != CANCommandBufferLength)
 			{
 				HardwareInterface::logger->Error(Languages::TextInvalidDataReceived);
+				SetCommunicationError();
 				continue;
 			}
 			Parse(buffer);

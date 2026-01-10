@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -41,7 +41,10 @@ namespace DataModel
 	std::string Track::Serialize() const
 	{
 		std::string str;
-		str = "objectType=Track";
+		str = "objectType=Track;";
+		str += LayoutItem::Serialize();
+		str += ";";
+		str += LockableItem::Serialize();
 		str += ";selectrouteapproach=";
 		str += to_string(selectRouteApproach);
 		str += ";trackstate=";
@@ -49,7 +52,7 @@ namespace DataModel
 		str += ";trackstatedelayed=";
 		str += to_string(trackStateDelayed);
 		str += ";locoorientation=";
-		str += to_string(locoOrientation);
+		str += to_string(locoBaseOrientation);
 		str += ";blocked=";
 		str += to_string(blocked);
 		str += ";locodelayed=";
@@ -64,23 +67,21 @@ namespace DataModel
 		str += to_string(showName);
 		str += ";displayname=";
 		str += displayName;
-		str += ";";
-		str += LayoutItem::Serialize();
-		str += ";";
-		str += LockableItem::Serialize();
 		str += ";tracktype=";
 		str += to_string(trackType);
+		str += ";main=";
+		str += to_string(mainID);
 		return str;
 	}
 
-	bool Track::Deserialize(const std::string& serialized)
+	void Track::Deserialize(const std::string& serialized)
 	{
 		map<string, string> arguments;
 		ParseArguments(serialized, arguments);
 		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
 		if (objectType.compare("Track") != 0)
 		{
-			return false;
+			return;
 		}
 		LayoutItem::Deserialize(arguments);
 		LockableItem::Deserialize(arguments);
@@ -107,7 +108,7 @@ namespace DataModel
 		selectRouteApproach = static_cast<SelectRouteApproach>(Utils::Utils::GetIntegerMapEntry(arguments, "selectrouteapproach", SelectRouteSystemDefault));
 		trackState = static_cast<DataModel::Feedback::FeedbackState>(Utils::Utils::GetBoolMapEntry(arguments, "trackstate", DataModel::Feedback::FeedbackStateFree));
 		trackStateDelayed = static_cast<DataModel::Feedback::FeedbackState>(Utils::Utils::GetBoolMapEntry(arguments, "trackstatedelayed", trackState));
-		locoOrientation = static_cast<Orientation>(Utils::Utils::GetBoolMapEntry(arguments, "locoorientation", OrientationRight));
+		locoBaseOrientation = static_cast<Orientation>(Utils::Utils::GetBoolMapEntry(arguments, "locoorientation", OrientationRight));
 		blocked = Utils::Utils::GetBoolMapEntry(arguments, "blocked", false);
 		const ObjectIdentifier& locoBaseDelayedIdentifier = GetLocoBase();
 		locoBaseDelayed.SetObjectID(Utils::Utils::GetIntegerMapEntry(arguments, "locodelayed", locoBaseDelayedIdentifier.GetObjectID()));
@@ -135,7 +136,8 @@ namespace DataModel
 			default:
 				break;
 		}
-		return true;
+		mainID = static_cast<TrackID>(Utils::Utils::GetIntegerMapEntry(arguments, "master", TrackNone)); // FIXME: 2025-02-28 can be removed later
+		mainID = static_cast<TrackID>(Utils::Utils::GetIntegerMapEntry(arguments, "main", mainID));
 	}
 
 	void Track::DeleteFeedbacks()
@@ -214,18 +216,39 @@ namespace DataModel
 		}
 	}
 
-	bool Track::SetLocoOrientation(const Orientation orientation)
+	bool Track::CanSetLocoBaseOrientation(const Orientation orientation, const ObjectIdentifier& locoBaseIdentifier)
 	{
-		if (locoOrientation == orientation)
+		if (locoBaseOrientation == orientation)
 		{
 			return true;
 		}
-		locoOrientation = orientation;
-		if (!cluster)
+
+		if (cluster)
+		{
+			return cluster->CanSetLocoBaseOrientation(static_cast<Orientation>(orientation ^ clusterInverted), locoBaseIdentifier);
+		}
+
+		const DataModel::LockableItem::LockState lockState = GetLockState();
+		return ((lockState == DataModel::LockableItem::LockStateFree)
+			|| ((lockState == DataModel::LockableItem::LockStateReserved)
+				&& (!locoBaseIdentifier.IsSet()
+					|| (locoBaseIdentifier == GetLocoBase()))));
+	}
+
+	bool Track::SetLocoBaseOrientation(const Orientation orientation)
+	{
+		if (locoBaseOrientation == orientation)
 		{
 			return true;
 		}
-		return cluster->SetLocoBaseOrientation(orientation, GetLocoBase());
+
+		if (cluster)
+		{
+			return cluster->SetLocoBaseOrientation(static_cast<Orientation>(orientation ^ clusterInverted), GetLocoBase());
+		}
+
+		locoBaseOrientation = orientation;
+		return true;
 	}
 
 	bool Track::Reserve(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
@@ -256,6 +279,7 @@ namespace DataModel
 		{
 			return false;
 		}
+
 		this->locoBaseDelayed = locoBaseIdentifier;
 		return true;
 	}
@@ -267,6 +291,7 @@ namespace DataModel
 		{
 			PublishState();
 		}
+
 		return ret;
 	}
 
@@ -280,6 +305,7 @@ namespace DataModel
 			{
 				return false;
 			}
+
 			if (trackState != DataModel::Feedback::FeedbackStateFree)
 			{
 				return true;
@@ -407,13 +433,46 @@ namespace DataModel
 		return true;
 	}
 
-	bool Track::RemoveRoute(Route* route)
+	bool Track::DeleteRoute(Route* route)
 	{
 		std::lock_guard<std::mutex> Guard(updateMutex);
 		size_t sizeBefore = routes.size();
 		routes.erase(std::remove(routes.begin(), routes.end(), route), routes.end());
 		size_t sizeAfter = routes.size();
 		return sizeBefore > sizeAfter;
+	}
+
+	bool Track::AddExtension(Track* track)
+	{
+		if (mainID != TrackNone)
+		{
+			return false;
+		}
+
+		std::lock_guard<std::mutex> Guard(updateMutex);
+		for (auto& extension : extensions)
+		{
+			if (extension == track)
+			{
+				return false;
+			}
+		}
+		extensions.push_back(track);
+		return true;
+	}
+
+	bool Track::DeleteExtension(const Track* track)
+	{
+		std::lock_guard<std::mutex> Guard(updateMutex);
+		size_t sizeBefore = extensions.size();
+		extensions.erase(std::remove(extensions.begin(), extensions.end(), track), extensions.end());
+		size_t sizeAfter = extensions.size();
+		return sizeBefore > sizeAfter;
+	}
+
+	void Track::UpdateMain()
+	{
+		mainTrack = (mainID == TrackNone ? nullptr : manager->GetTrack(mainID));
 	}
 
 	SelectRouteApproach Track::GetSelectRouteApproachCalculated() const
@@ -434,7 +493,7 @@ namespace DataModel
 			std::lock_guard<std::mutex> Guard(updateMutex);
 			for (auto route : routes)
 			{
-				if (route->FromTrackOrientation(logger, GetID(), locoOrientation, loco, allowLocoTurn))
+				if (route->FromTrackOrientation(logger, GetID(), locoBaseOrientation, loco, allowLocoTurn))
 				{
 					validRoutes.push_back(route);
 				}

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -24,6 +24,7 @@ along with RailControl; see the file LICENCE. If not see
 #include <string>
 #include <vector>
 
+#include "DataModel/Relation.h"
 #include "Manager.h"
 
 namespace Server { namespace Web
@@ -34,18 +35,33 @@ namespace Server { namespace Web
 	{
 		public:
 			WebClientCluster() = delete;
-			WebClientCluster(Manager& manager, WebClient& client)
+
+			inline WebClientCluster(Manager& manager, WebClient& client)
 			:	manager(manager),
 				client(client)
-			{}
+			{
+			}
 
 			void HandleClusterList();
+
+			static HtmlTag HtmlTagSelectTrackEntry(const std::string& priority,
+				const TrackID trackID,
+				const std::map<std::string,ObjectID>& trackOptions,
+				const DataModel::Relation::Data inverted,
+				const std::map<std::string,ObjectID>& invertedOptions);
+
+			HtmlTag HtmlTagSelectTrack(const std::vector<DataModel::Relation*>& relations,
+				const ClusterID clusterID) const;
+
 			void HandleClusterEdit(const std::map<std::string,std::string>& arguments);
+
 			void HandleClusterSave(const std::map<std::string,std::string>& arguments);
+
 			void HandleClusterAskDelete(const std::map<std::string,std::string>& arguments);
+
 			void HandleClusterDelete(const std::map<std::string,std::string>& arguments);
+
 			std::map<std::string,ObjectID> GetTrackOptions(const ClusterID clusterId = ClusterNone) const;
-			std::map<std::string,ObjectID> GetSignalOptions(const std::vector<DataModel::Relation*>&) const;
 
 		private:
 			Manager& manager;

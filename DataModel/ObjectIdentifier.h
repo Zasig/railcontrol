@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -59,7 +59,7 @@ namespace DataModel
 				return GetObjectTypeAsString() + "=" + GetObjectIdAsString();
 			}
 
-			bool Deserialize(const std::map<std::string,std::string>& arguments);
+			void Deserialize(const std::map<std::string,std::string>& arguments);
 
 			inline ObjectIdentifier& operator=(const ObjectIdentifier& other) = default;
 

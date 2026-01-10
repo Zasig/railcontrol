@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -103,7 +103,7 @@ namespace DataModel
 		return out;
 	}
 
-	bool LocoFunctions::Deserialize(const std::string& serialized)
+	void LocoFunctions::Deserialize(const std::string& serialized)
 	{
 		std::deque<std::string> functionsSerialized;
 		Utils::Utils::SplitString(serialized, "f", functionsSerialized);
@@ -136,7 +136,6 @@ namespace DataModel
 			entries[nr].timer = static_cast<LocoFunctionTimer>(Utils::Integer::StringToInteger(functionTexts.front(), 0));
 			functionTexts.pop_front();
 		}
-		return true;
 	}
 
 	std::string LocoFunctions::GetLocoFunctionIcon(const LocoFunctionNr nr, const LocoFunctionIcon icon)

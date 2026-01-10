@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -47,8 +47,9 @@ namespace DataModel
 				RelationTypeFeedbackAtUnset   = (ObjectTypeFeedback << 3) + 1,
 				RelationTypeRouteAtLock       = (ObjectTypeRoute << 3),
 				RelationTypeRouteAtUnlock     = (ObjectTypeRoute << 3) + 1,
+				RelationTypeRouteConditions   = (ObjectTypeRoute << 3) + 2,
 				RelationTypeClusterTrack      = (ObjectTypeCluster << 3),
-				RelationTypeMultipleUnitSlave = (ObjectTypeMultipleUnit << 3),
+				RelationTypeMultipleUnitLoco  = (ObjectTypeMultipleUnit << 3),
 			};
 
 			typedef unsigned short Data;
@@ -59,10 +60,10 @@ namespace DataModel
 				const ObjectIdentifier& object2,
 				const RelationType type,
 				const Priority priority = 0,
-				const unsigned short data = 0)
+				const Data data = 0)
 			:	manager(manager),
-			 	object1(object1),
-			 	object2(object2),
+				object1(object1),
+				object2(object2),
 				type(type),
 				priority(priority),
 				data(data)
@@ -82,7 +83,7 @@ namespace DataModel
 			}
 
 			virtual std::string Serialize() const override;
-			virtual bool Deserialize(const std::string& serialized) override;
+			virtual void Deserialize(const std::string& serialized) override;
 
 			inline ObjectID ObjectID1() const
 			{
@@ -109,7 +110,7 @@ namespace DataModel
 				return object2;
 			}
 
-			LockableItem* GetObject2();
+			Object* GetObject2();
 
 			inline RelationType GetType() const
 			{
@@ -133,6 +134,7 @@ namespace DataModel
 
 			bool Reserve(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override;
 			bool Lock(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override;
+			bool CheckCondition(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier);
 			bool Release(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override;
 			bool Execute(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier, const Delay delay);
 

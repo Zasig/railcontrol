@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -111,14 +111,14 @@ namespace DataModel
 		return ss.str();
 	}
 
-	bool LayoutItem::Deserialize(const std::string& serialized)
+	void LayoutItem::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
-		return Deserialize(arguments);
+		Deserialize(arguments);
 	}
 
-	bool LayoutItem::Deserialize(const map<string,string>& arguments)
+	void LayoutItem::Deserialize(const map<string,string>& arguments)
 	{
 		Object::Deserialize(arguments);
 		visible = static_cast<Visible>(Utils::Utils::GetIntegerMapEntry(arguments, "visible"));
@@ -136,7 +136,6 @@ namespace DataModel
 		{
 			rotation = Rotation0;
 		}
-		return true;
 	}
 
 	std::string LayoutItem::Rotation(LayoutRotation rotation)

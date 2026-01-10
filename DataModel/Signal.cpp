@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -29,22 +29,6 @@ using std::string;
 
 namespace DataModel
 {
-	void Signal::SetAccessoryType(AccessoryType type)
-	{
-		AccessoryBase::SetAccessoryType(type);
-		ResetStateAddressMap();
-	}
-
-	ObjectType Signal::GetObjectType() const
-	{
-		return ObjectTypeSignal;
-	}
-
-	std::string Signal::GetLayoutType() const
-	{
-		return Languages::GetText(Languages::TextSignal);
-	}
-
 	std::string Signal::Serialize() const
 	{
 		string str = "objectType=Signal;";
@@ -63,14 +47,14 @@ namespace DataModel
 		return str;
 	}
 
-	bool Signal::Deserialize(const std::string& serialized)
+	void Signal::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
 		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
 		if (objectType.compare("Signal") != 0)
 		{
-			return false;
+			return;
 		}
 
 		AccessoryBase::Deserialize(arguments);
@@ -87,7 +71,6 @@ namespace DataModel
 			}
 			SetStateAddressOffset(static_cast<AccessoryState>(i), address);
 		}
-		return true;
 	}
 
 	Signal& Signal::operator=(const Hardware::AccessoryCacheEntry& accessory)

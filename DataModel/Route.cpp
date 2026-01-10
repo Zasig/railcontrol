@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -84,17 +84,18 @@ namespace DataModel
 		return str;
 	}
 
-	bool Route::Deserialize(const std::string& serialized)
+	void Route::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
 		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
 		if (objectType.compare("Route") != 0)
 		{
-			return false;
+			return;
 		}
 
 		LayoutItem::Deserialize(arguments);
+		SetRotation(LayoutItem::Rotation0);
 		LockableItem::Deserialize(arguments);
 
 		delay = static_cast<Delay>(Utils::Utils::GetIntegerMapEntry(arguments, "delay", DefaultDelay));
@@ -122,7 +123,7 @@ namespace DataModel
 			maxTrainLength = 0;
 			waitAfterRelease = 0;
 			followUpRoute = RouteNone;
-			return true;
+			return;
 		}
 		fromTrack = static_cast<Length>(Utils::Utils::GetIntegerMapEntry(arguments, "fromTrack", TrackNone));
 		fromOrientation = static_cast<Orientation>(Utils::Utils::GetBoolMapEntry(arguments, "fromorientation", OrientationRight));
@@ -143,7 +144,6 @@ namespace DataModel
 		maxTrainLength = static_cast<Length>(Utils::Utils::GetIntegerMapEntry(arguments, "maxtrainlength", 0));
 		waitAfterRelease = Utils::Utils::GetIntegerMapEntry(arguments, "waitafterrelease", 0);
 		followUpRoute = Utils::Utils::GetIntegerMapEntry(arguments, "followuproute", RouteNone);
-		return true;
 	}
 
 	void Route::DeleteRelations(std::vector<DataModel::Relation*>& relations)
@@ -224,10 +224,10 @@ namespace DataModel
 		if (allowLocoTurn && locoPushpull)
 		{
 			Track* trackBase = manager->GetTrack(fromTrack);
-			if (trackBase != nullptr)
+			if (trackBase)
 			{
 				bool allowTrackTurn = trackBase->GetAllowLocoTurn();
-				if (allowTrackTurn == true)
+				if (allowTrackTurn)
 				{
 					return true;
 				}
@@ -241,6 +241,13 @@ namespace DataModel
 
 	bool Route::Execute(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
+		const bool retCondition = CheckConditions(logger, locoBaseIdentifier);
+		if (!retCondition)
+		{
+			manager->Warning(Languages::TextConditionsNotFulfilled);
+			return false;
+		}
+
 		const bool isInUse = IsInUse();
 		if (isInUse && (locoBaseIdentifier != GetLocoBase()))
 		{
@@ -269,8 +276,15 @@ namespace DataModel
 
 	bool Route::Reserve(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
+		const bool retCondition = CheckConditions(logger, locoBaseIdentifier);
+		if (!retCondition)
+		{
+			return false;
+		}
+
 		if (manager->Booster() == BoosterStateStop)
 		{
+			manager->Warning(Languages::TextBoosterIsTurnedOff);
 			logger->Debug(Languages::TextBoosterIsTurnedOff);
 			return false;
 		}
@@ -285,8 +299,12 @@ namespace DataModel
 		if (automode == AutomodeYes)
 		{
 			Track* track = manager->GetTrack(toTrack);
-			if (!track || !track->Reserve(logger, locoBaseIdentifier))
+			if (!track
+				|| !track->CanSetLocoBaseOrientation(toOrientation)
+				|| !track->Reserve(logger, locoBaseIdentifier)
+				|| !track->SetLocoBaseOrientation(toOrientation))
 			{
+				logger->Debug(Languages::TextUnableToReserveRouteToTrack, GetName(), track->GetName());
 				ReleaseInternal(logger, locoBaseIdentifier);
 				return false;
 			}
@@ -294,20 +312,31 @@ namespace DataModel
 
 		for (auto relation : relationsAtLock)
 		{
-			bool retRelation = relation->Reserve(logger, locoBaseIdentifier);
-			if (!retRelation)
+			bool result = relation->Reserve(logger, locoBaseIdentifier);
+			if (!result)
 			{
+				const Object* object = relation->GetObject2();
+				const string objectName = object ? object->GetName() : Languages::GetText(Languages::TextUnknownElement);
+				logger->Debug(Languages::TextUnableToReserveRouteElement, GetName(), objectName);
 				ReleaseInternalWithToTrack(logger, locoBaseIdentifier);
 				return false;
 			}
 		}
+
 		return true;
 	}
 
 	bool Route::Lock(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
 	{
+		const bool retCondition = CheckConditions(logger, locoBaseIdentifier);
+		if (!retCondition)
+		{
+			return false;
+		}
+
 		if (manager->Booster() == BoosterStateStop)
 		{
+			manager->Warning(Languages::TextBoosterIsTurnedOff);
 			logger->Debug(Languages::TextBoosterIsTurnedOff);
 			return false;
 		}
@@ -339,6 +368,20 @@ namespace DataModel
 			}
 		}
 
+		return true;
+	}
+
+	bool Route::CheckConditions(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier)
+	{
+		std::lock_guard<std::mutex> Guard(updateMutex);
+		for (auto condition : relationsConditions)
+		{
+			const bool retRelation = condition->CheckCondition(logger, locoBaseIdentifier);
+			if (!retRelation)
+			{
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -381,6 +424,13 @@ namespace DataModel
 			}
 		}
 		for (auto relation : relationsAtUnlock)
+		{
+			if (relation->CompareObject2(identifier))
+			{
+				return true;
+			}
+		}
+		for (auto relation : relationsConditions)
 		{
 			if (relation->CompareObject2(identifier))
 			{

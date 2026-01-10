@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -106,6 +106,13 @@ namespace Storage
 			inline void DeleteText(TextID textID)
 			{
 				sqlite.DeleteObject(ObjectTypeText, textID);
+			}
+
+			void AllCounters(std::map<CounterID,DataModel::Counter*>& counters);
+
+			inline void DeleteCounter(CounterID counterID)
+			{
+				sqlite.DeleteObject(ObjectTypeCounter, counterID);
 			}
 
 			inline void Save(const Hardware::HardwareParams& hardwareParams)

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -150,12 +150,12 @@ namespace Network
 
 	bool Serial::ReceiveExact(std::string& data, const size_t length, const unsigned int timeoutS, const unsigned int timeoutUS)
 	{
-		size_t startSize = data.length();
-		size_t endSize = startSize + length;
+		const size_t startSize = data.length();
+		const size_t endSize = startSize + length;
 		while (endSize > data.length())
 		{
 			bool ret = Receive(data, endSize - data.length(), timeoutS, timeoutUS);
-			if (ret == false)
+			if (!ret)
 			{
 				return false;
 			}
@@ -166,12 +166,12 @@ namespace Network
 	ssize_t Serial::ReceiveExact(unsigned char* data, const size_t length, const unsigned int timeoutS, const unsigned int timeoutUS)
 	{
 		size_t actualSize = 0;
-		size_t endSize = length;
-		while (actualSize < endSize)
+		while (actualSize < length)
 		{
-			ssize_t ret = Receive(data + actualSize, endSize - actualSize, timeoutS, timeoutUS);
+			ssize_t ret = Receive(data + actualSize, length - actualSize, timeoutS, timeoutUS);
 			if (ret <= 0)
 			{
+				// FIXME: Why not return -1 ?
 				return actualSize;
 			}
 			actualSize += ret;

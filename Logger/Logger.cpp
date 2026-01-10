@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -36,7 +36,7 @@ namespace Logger
 		struct timeval timestamp;
 		gettimeofday(&timestamp, NULL);
 		struct tm tm;
-		gmtime_r(&timestamp.tv_sec, &tm);
+		localtime_r(&timestamp.tv_sec, &tm);
 		strftime(buffer, sizeof(buffer), "%F %T.", &tm);
 		snprintf(buffer + 20, sizeof(buffer) - 20, "%06li", static_cast<long>(timestamp.tv_usec));
 		return string(buffer);

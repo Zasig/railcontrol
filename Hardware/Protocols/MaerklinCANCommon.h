@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -50,7 +50,11 @@ namespace Hardware { namespace Protocols
 				const DataModel::LocoFunctionNr function,
 				const DataModel::LocoFunctionState on);
 
-			void AccessoryOnOrOff(const Protocol protocol, const Address address, const DataModel::AccessoryState state, const bool on);
+			void Accessory(const Protocol protocol,
+				const Address address,
+				const DataModel::AccessoryState state,
+				const bool on);
+
 			void ProgramRead(const ProgramMode mode, const Address address, const CvNumber cv);
 			void ProgramWrite(const ProgramMode mode, const Address address, const CvNumber cv, const CvValue value);
 
@@ -74,20 +78,15 @@ namespace Hardware { namespace Protocols
 			inline MaerklinCANCommon(const std::string& uid,
 				ControlID controlID,
 				Manager* manager,
-				const bool isCs2Master,
+				const bool isCs2Main,
 				Logger::Logger* logger)
 			:	run(true),
 				manager(manager),
 				logger(logger),
 				uid(Utils::Integer::HexToInteger(uid, 0)),
 				hash(CalcHash(this->uid)),
-				hasCs2Master(false),
-				isCs2Master(isCs2Master),
-				canFileData(nullptr),
-				canFileDataPointer(nullptr),
-				canFileDataSize(0),
-				canFileCrc(0),
-				canFileCrcSize(0),
+				hasCs2Main(false),
+				isCs2Main(isCs2Main),
 				controlID(controlID)
 			{
 				logger->Debug(Languages::TextMyUidHash, uid, Utils::Integer::IntegerToHex(hash));
@@ -154,19 +153,19 @@ namespace Hardware { namespace Protocols
 
 			enum CanDeviceType : uint16_t
 			{
-				CanDeviceGfp         = 0x0000,
-				CanDeviceGleisbox    = 0x0010,
-				CanDeviceGleisbox_2  = 0x0011, // undocumented
-				CanDeviceConnect6021 = 0x0020,
-				CanDeviceMs2         = 0x0030,
-				CanDeviceMs2_2       = 0x0032, // undocumented
-				CanDeviceMs2_3       = 0x0033, // undocumented
-				CanDeviceMs2_4       = 0x0034, // undocumented
-				CanDeviceLinkS88     = 0x0040, // undocumented
-				CanDeviceCs2Slave_2  = 0xeeee, // undocumented
-				CanDeviceWireless    = 0xffe0,
-				CanDeviceCs2Slave    = 0xfff0, // undocumented
-				CanDeviceCs2Master   = 0xffff
+				CanDeviceGfp            = 0x0000,
+				CanDeviceGleisbox       = 0x0010,
+				CanDeviceGleisbox_2     = 0x0011, // undocumented
+				CanDeviceConnect6021    = 0x0020,
+				CanDeviceMs2            = 0x0030,
+				CanDeviceMs2_2          = 0x0032, // undocumented
+				CanDeviceMs2_3          = 0x0033, // undocumented
+				CanDeviceMs2_4          = 0x0034, // undocumented
+				CanDeviceLinkS88        = 0x0040, // undocumented
+				CanDeviceCs2Secondary_2 = 0xeeee, // undocumented
+				CanDeviceWireless       = 0xffe0,
+				CanDeviceCs2Secondary   = 0xfff0, // undocumented
+				CanDeviceCs2Main        = 0xffff
 			};
 
 //				enum CanFileType : uint8_t
@@ -282,6 +281,16 @@ namespace Hardware { namespace Protocols
 			typedef uint16_t CanHash;
 			typedef uint16_t CanFileCrc;
 
+			struct CanFile
+			{
+				CanHash hash;
+				unsigned char* data;
+				unsigned char* dataPointer;
+				size_t dataSize;
+				CanFileCrc crc;
+				size_t crcSize;
+			};
+
 			void CreateCommandHeader(unsigned char* const buffer,
 				const CanCommand command,
 				const CanResponse response,
@@ -331,11 +340,20 @@ namespace Hardware { namespace Protocols
 				return static_cast<Address>(Utils::Integer::DataBigEndianToInt(buffer + 5));
 			}
 
-			static inline FeedbackPin ParseFeedbackPin(const unsigned char* const buffer)
+			static inline void ParseFeedbackPin(const unsigned char* const buffer,
+				FeedbackDevice& device,
+				FeedbackBus& bus,
+				FeedbackPin& pin)
 			{
-				FeedbackPin pin = static_cast<FeedbackPin>(Utils::Integer::DataBigEndianToInt(buffer + 5));
-				pin = (pin & 0x00000FFF) | ((pin & 0x00FF0000) >> 4);
-				return pin;
+				pin = static_cast<FeedbackPin>(Utils::Integer::DataBigEndianToInt(buffer + 5));
+				device = (pin >> 16) & 0x000000FF;
+				bus = 0;
+				pin &= 0x0000FFFF;
+				while (pin > 1000)
+				{
+					++bus;
+					pin -= 1000;
+				}
 			}
 
 			static inline CanHash ParseHash(const unsigned char* const buffer)
@@ -356,9 +374,19 @@ namespace Hardware { namespace Protocols
 			void ParseCommandPing(const unsigned char* const buffer);
 			void ParseCommandRequestConfigData(const unsigned char* const buffer);
 			void SendCompressedFile(const std::string& dataPlain, const unsigned char* fileName = nullptr);
+
+			void DeleteCanFile(CanFile* canFile);
+
+			struct CanFile* GetCanFile(const CanHash hash);
+
 			void ParseCommandConfigData(const unsigned char* const buffer);
-			void ParseCommandConfigDataFirst(const unsigned char* const buffer);
-			void ParseCommandConfigDataNext(const unsigned char* const buffer);
+
+			void ParseCommandConfigDataFirst(const unsigned char* const buffer,
+				struct CanFile* canFile);
+
+			void ParseCommandConfigDataNext(const unsigned char* const buffer,
+				struct CanFile* canFile);
+
 			void ParseResponseS88Event(const unsigned char* const buffer);
 			void ParseResponseReadConfig(const unsigned char* const buffer);
 			void ParseResponsePing(const unsigned char* const buffer);
@@ -373,7 +401,7 @@ namespace Hardware { namespace Protocols
 			void ParseCs2FileLocomotives(std::deque<std::string>& lines);
 			void ParseCs2File(std::deque<std::string>& lines);
 
-			static uint16_t CalcCRC(const unsigned char* data, const size_t length);
+			static CanFileCrc CalcCrc(const unsigned char *data, const size_t length);
 
 			static CanHash CalcHash(const CanUid uid);
 			void GenerateUidHash();
@@ -391,29 +419,14 @@ namespace Hardware { namespace Protocols
 			}
 			virtual void Send(const unsigned char* buffer) = 0;
 
-			static uint16_t CalcCrc(const unsigned char *data, const size_t length);
-
-			inline void CleanUpCanFileData()
-			{
-				free(canFileData);
-				canFileData = nullptr;
-				canFileDataPointer = nullptr;
-				canFileDataSize = 0;
-				canFileCrc = 0;
-				canFileCrcSize = 0;
-			}
 			CanUid uid;
 			CanHash hash;
-			volatile bool hasCs2Master;
-			const bool isCs2Master;
+			volatile bool hasCs2Main;
+			const bool isCs2Main;
 			std::thread receiverThread;
 			std::thread pingThread;
 
-			unsigned char* canFileData;
-			unsigned char* canFileDataPointer;
-			size_t canFileDataSize;
-			CanFileCrc canFileCrc;
-			size_t canFileCrcSize;
+			std::vector<struct CanFile> canFiles;
 
 			ControlID controlID;
 

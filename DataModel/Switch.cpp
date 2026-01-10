@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -40,14 +40,14 @@ namespace DataModel
 		return str;
 	}
 
-	bool Switch::Deserialize(const std::string& serialized)
+	void Switch::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
 		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
 		if (objectType.compare("Switch") != 0)
 		{
-			return false;
+			return;
 		}
 
 		AccessoryBase::Deserialize(arguments);
@@ -55,7 +55,6 @@ namespace DataModel
 		LockableItem::Deserialize(arguments);
 		SetSizeFromType();
 		SetVisible(VisibleYes);
-		return true;
 	}
 
 	void Switch::SetAccessoryState(const AccessoryState state)

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -69,7 +69,7 @@ namespace Server { namespace Web
 		LayoutPosition posx = Utils::Utils::GetIntegerMapEntry(arguments, "posx", 0);
 		LayoutPosition posy = Utils::Utils::GetIntegerMapEntry(arguments, "posy", 0);
 		LayoutPosition posz = Utils::Utils::GetIntegerMapEntry(arguments, "posz", LayerUndeletable);
-		LayoutRotation rotation = Utils::Utils::GetIntegerMapEntry(arguments, "rotation", DataModel::LayoutItem::Rotation0);
+		LayoutRotation rotation = Utils::Utils::GetIntegerMapEntry(arguments, "rotation", DataModel::LayoutItem::Rotation90);
 		DataModel::AccessoryType signalType = DataModel::SignalTypeSimpleLeft;
 		DataModel::AccessoryPulseDuration duration = manager.GetDefaultAccessoryDuration();
 		bool inverted = false;
@@ -212,7 +212,7 @@ namespace Server { namespace Web
 		const LayoutPosition posY = Utils::Utils::GetIntegerMapEntry(arguments, "posy", 0);
 		const LayoutPosition posZ = Utils::Utils::GetIntegerMapEntry(arguments, "posz", 0);
 		const LayoutItemSize height = Utils::Utils::GetIntegerMapEntry(arguments, "length", 1);
-		const LayoutRotation rotation = Utils::Utils::GetIntegerMapEntry(arguments, "rotation", DataModel::LayoutItem::Rotation0);
+		const LayoutRotation rotation = Utils::Utils::GetIntegerMapEntry(arguments, "rotation", DataModel::LayoutItem::Rotation90);
 		const DataModel::AccessoryType signalType = static_cast<DataModel::AccessoryType>(Utils::Utils::GetIntegerMapEntry(arguments, "signaltype", DataModel::SignalTypeSimpleLeft));
 		std::map<AccessoryState,AddressOffset> offsets;
 		for (AddressOffset offset = 0; offset <= SignalStateMax; ++offset)

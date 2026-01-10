@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -34,6 +34,7 @@ along with RailControl; see the file LICENCE. If not see
 #include "Network/TcpConnection.h"
 #include "ResponseHtml.h"
 #include "Server/Web/WebClientCluster.h"
+#include "Server/Web/WebClientCounter.h"
 #include "Server/Web/WebClientRoute.h"
 #include "Server/Web/WebClientSignal.h"
 #include "Server/Web/WebClientStatic.h"
@@ -81,6 +82,7 @@ namespace Server { namespace Web
 				signal(manager, *this, logger),
 				route(manager, *this, logger),
 				text(manager, *this),
+				counter(manager, *this),
 				headOnly(false),
 				buttonID(0)
 			{
@@ -141,7 +143,7 @@ namespace Server { namespace Web
 				ReplyHtmlWithHeaderAndParagraph(Logger::Logger::Format(Languages::GetText(text), args...));
 			}
 
-			HtmlTag HtmlTagSlaveSelect(const std::string& prefix,
+			HtmlTag HtmlTagSelectSlave(const std::string& prefix,
 				const std::vector<DataModel::Relation*>& relations,
 				const std::map<std::string,ObjectID>& options,
 				const bool allowNew = true) const;
@@ -160,10 +162,17 @@ namespace Server { namespace Web
 				const DataModel::LayoutItem::LayoutRotation rotation = DataModel::LayoutItem::RotationNotRelevant,
 				const DataModel::LayoutItem::Visible visible = DataModel::LayoutItem::VisibleNotRelevant) const ;
 
-			HtmlTag HtmlTagControlLoco(ControlID& controlId, const std::string& objectType, const ObjectID objectID) const;
-			HtmlTag HtmlTagControlMultipleUnit(ControlID& controlId, const std::string& objectType, const ObjectID objectID) const;
-			HtmlTag HtmlTagControlAccessory(ControlID& controlID, const std::string& objectType, const ObjectID objectID) const;
-			HtmlTag HtmlTagControlFeedback(ControlID& controlId, const std::string& objectType, const ObjectID objectID) const;
+			HtmlTag HtmlTagControlLoco(ControlID& controlId,
+				const ObjectID objectID) const;
+
+			HtmlTag HtmlTagControlMultipleUnit(ControlID& controlId,
+				const ObjectID objectID) const;
+
+			HtmlTag HtmlTagControlAccessory(ControlID& controlID,
+				const std::string& objectType,
+				const ObjectID objectID) const;
+
+			HtmlTag HtmlTagControlFeedback(ControlID& controlId) const;
 
 			HtmlTag HtmlTagProtocolAccessory(const ControlID controlID, const Protocol selectedProtocol);
 
@@ -175,7 +184,7 @@ namespace Server { namespace Web
 				const SignalID signalId,
 				const DataModel::Relation::Data data = DataModel::SignalStateStop);
 
-			static std::string ProtocolName(const Protocol protocol)
+			static inline std::string ProtocolName(const Protocol protocol)
 			{
 				return ProtocolSymbols[protocol <= ProtocolEnd ? protocol : ProtocolNone];
 			}
@@ -186,6 +195,10 @@ namespace Server { namespace Web
 
 			HtmlTag HtmlTagMatchKeyFeedback(const ControlID controlID,
 				const std::string& selectedMatchKey) const;
+
+			HtmlTag HtmlTagFeedbackDeviceBus(const ControlID controlID,
+				const FeedbackDevice device,
+				const FeedbackBus bus);
 
 		private:
 			void InterpretClientRequest(const std::deque<std::string>& lines, std::string& method, std::string& uri, std::string& protocol, std::map<std::string,std::string>& arguments, std::map<std::string,std::string>& headers);
@@ -218,6 +231,7 @@ namespace Server { namespace Web
 
 			std::map<std::string,ObjectID> GetMultipleUnitSlaveOptions() const;
 
+			void HandleAskShutdown();
 			void HandleSelectLoco(const std::map<std::string, std::string>& arguments);
 			void HandleLayerEdit(const std::map<std::string, std::string>& arguments);
 			void HandleLayerSave(const std::map<std::string, std::string>& arguments);
@@ -246,6 +260,8 @@ namespace Server { namespace Web
 			void HandleMultipleUnitDelete(const std::map<std::string, std::string>& arguments);
 			void HandleMultipleUnitRelease(const std::map<std::string, std::string>& arguments);
 			void HandleProtocol(const std::map<std::string, std::string>& arguments);
+			void HandleAccessoryAddress(const std::map<std::string, std::string>& arguments);
+			void HandleFeedbackDeviceBus(const std::map<std::string, std::string>& arguments);
 			void HandleLayout(const std::map<std::string,std::string>& arguments);
 			void HandleAccessoryEdit(const std::map<std::string,std::string>& arguments);
 			void HandleAccessorySave(const std::map<std::string,std::string>& arguments);
@@ -302,6 +318,7 @@ namespace Server { namespace Web
 			WebClientSignal signal;
 			WebClientRoute route;
 			WebClientText text;
+			WebClientCounter counter;
 			bool headOnly;
 			unsigned int buttonID;
 	};

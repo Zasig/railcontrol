@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -28,6 +28,7 @@ along with RailControl; see the file LICENCE. If not see
 
 using DataModel::Accessory;
 using DataModel::Cluster;
+using DataModel::Counter;
 using DataModel::Feedback;
 using DataModel::Layer;
 using DataModel::Loco;
@@ -51,6 +52,10 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Loco* loco = new Loco(manager, serializedObject);
+			if (!loco)
+			{
+				continue;
+			}
 			locos[loco->GetID()] = loco;
 		}
 	}
@@ -69,15 +74,19 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			MultipleUnit* multipleUnit = new MultipleUnit(manager, serializedObject);
+			if (!multipleUnit)
+			{
+				continue;
+			}
 			const MultipleUnitID multipleUnitID = multipleUnit->GetID();
-			multipleUnit->AssignSlaves(RelationsFrom(DataModel::Relation::RelationTypeMultipleUnitSlave, multipleUnitID));
+			multipleUnit->AssignSlaves(RelationsFrom(DataModel::Relation::RelationTypeMultipleUnitLoco, multipleUnitID));
 			multipleUnits[multipleUnitID] = multipleUnit;
 		}
 	}
 
 	void StorageHandler::DeleteMultipleUnit(const MultipleUnitID multipleUnitID)
 	{
-		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeMultipleUnitSlave, multipleUnitID);
+		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeMultipleUnitLoco, multipleUnitID);
 		sqlite.DeleteRelationsTo(ObjectTypeMultipleUnit, multipleUnitID);
 		sqlite.DeleteObject(ObjectTypeMultipleUnit, multipleUnitID);
 	}
@@ -89,7 +98,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Accessory* accessory = new Accessory(serializedObject);
-			if (accessory == nullptr)
+			if (!accessory)
 			{
 				continue;
 			}
@@ -104,7 +113,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Feedback* feedback = new Feedback(manager, serializedObject);
-			if (feedback == nullptr)
+			if (!feedback)
 			{
 				continue;
 			}
@@ -119,7 +128,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Track* track = new Track(manager, serializedObject);
-			if (track == nullptr)
+			if (!track)
 			{
 				continue;
 			}
@@ -140,6 +149,8 @@ namespace Storage
 
 	void StorageHandler::DeleteTrack(const TrackID trackID)
 	{
+		sqlite.DeleteRelationsFrom(Relation::RelationTypeTrackSignal, trackID);
+		sqlite.DeleteRelationsFrom(Relation::RelationTypeTrackFeedback, trackID);
 		sqlite.DeleteRelationsTo(ObjectTypeTrack, trackID);
 		sqlite.DeleteObject(ObjectTypeTrack, trackID);
 	}
@@ -151,7 +162,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Switch* mySwitch = new Switch(serializedObject);
-			if (mySwitch == nullptr)
+			if (!mySwitch)
 			{
 				continue;
 			}
@@ -168,6 +179,8 @@ namespace Storage
 		SaveRelations(route.GetRelationsAtLock());
 		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeRouteAtUnlock, routeID);
 		SaveRelations(route.GetRelationsAtUnlock());
+		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeRouteConditions, routeID);
+		SaveRelations(route.GetRelationsConditions());
 	}
 
 	void StorageHandler::Save(const DataModel::Loco& loco)
@@ -183,7 +196,7 @@ namespace Storage
 		const string serialized = multipleUnit.Serialize();
 		const MultipleUnitID multipleUnitID = multipleUnit.GetID();
 		sqlite.SaveObject(ObjectTypeMultipleUnit, multipleUnitID, multipleUnit.GetName(), serialized);
-		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeMultipleUnitSlave, multipleUnitID);
+		sqlite.DeleteRelationsFrom(DataModel::Relation::RelationTypeMultipleUnitLoco, multipleUnitID);
 		SaveRelations(multipleUnit.GetSlaves());
 	}
 
@@ -214,13 +227,14 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Route* route = new Route(manager, serializedObject);
-			if (route == nullptr)
+			if (!route)
 			{
 				continue;
 			}
 			const RouteID routeID = route->GetID();
 			route->AssignRelationsAtLock(RelationsFrom(Relation::RelationTypeRouteAtLock, routeID));
 			route->AssignRelationsAtUnlock(RelationsFrom(Relation::RelationTypeRouteAtUnlock, routeID));
+			route->AssignRelationsConditions(RelationsFrom(Relation::RelationTypeRouteConditions, routeID));
 			routes[routeID] = route;
 		}
 	}
@@ -239,7 +253,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Layer* layer = new Layer(serializedObject);
-			if (layer == nullptr)
+			if (!layer)
 			{
 				continue;
 			}
@@ -254,7 +268,7 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Signal* signal = new Signal(manager, serializedObject);
-			if (signal == nullptr)
+			if (!signal)
 			{
 				continue;
 			}
@@ -274,8 +288,8 @@ namespace Storage
 		sqlite.ObjectsOfType(ObjectTypeCluster, serializedObjects);
 		for (auto& serializedObject : serializedObjects)
 		{
-			Cluster* cluster = new Cluster(serializedObject);
-			if (cluster == nullptr)
+			Cluster* cluster = new Cluster(manager, serializedObject);
+			if (!cluster)
 			{
 				continue;
 			}
@@ -292,11 +306,26 @@ namespace Storage
 		for (auto& serializedObject : serializedObjects)
 		{
 			Text* text = new Text(serializedObject);
-			if (text == nullptr)
+			if (!text)
 			{
 				continue;
 			}
 			texts[text->GetID()] = text;
+		}
+	}
+
+	void StorageHandler::AllCounters(std::map<CounterID,DataModel::Counter*>& counters)
+	{
+		vector<string> serializedObjects;
+		sqlite.ObjectsOfType(ObjectTypeCounter, serializedObjects);
+		for (auto& serializedObject : serializedObjects)
+		{
+			Counter* counter = new Counter(serializedObject);
+			if (!counter)
+			{
+				continue;
+			}
+			counters[counter->GetID()] = counter;
 		}
 	}
 
@@ -317,7 +346,7 @@ namespace Storage
 		for (auto& relationString : relationStrings)
 		{
 			Relation* relation = new Relation(manager, relationString);
-			if (relation == nullptr)
+			if (!relation)
 			{
 				continue;
 			}

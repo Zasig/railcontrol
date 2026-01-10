@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -78,16 +78,26 @@ namespace DataModel
 				Deserialize(serialized);
 			}
 
-			virtual void SetAccessoryType(AccessoryType type) override;
+			inline void SetAccessoryType(AccessoryType type) override
+			{
+				AccessoryBase::SetAccessoryType(type);
+				ResetStateAddressMap();
+			}
 
-			virtual ObjectType GetObjectType() const override;
+			inline ObjectType GetObjectType() const override
+			{
+				return ObjectTypeSignal;
+			}
 
-			virtual std::string GetLayoutType() const override;
+			inline  std::string GetLayoutType() const override
+			{
+				return Languages::GetText(Languages::TextSignal);
+			}
 
 			std::string Serialize() const override;
 
 			using HardwareHandle::Deserialize;
-			virtual bool Deserialize(const std::string& serialized) override;
+			void Deserialize(const std::string& serialized) override;
 
 			inline Track* GetTrack() const
 			{

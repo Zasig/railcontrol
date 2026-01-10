@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -42,7 +42,7 @@ namespace DataModel
 		return str;
 	}
 
-	bool AccessoryBase::Deserialize(const map<string,string>& arguments)
+	void AccessoryBase::Deserialize(const map<string,string>& arguments)
 	{
 		HardwareHandle::Deserialize(arguments);
 		accessoryType = static_cast<AccessoryType>(Utils::Utils::GetIntegerMapEntry(arguments, "type"));
@@ -52,7 +52,6 @@ namespace DataModel
 		lastUsed = Utils::Utils::GetIntegerMapEntry(arguments, "lastused", 0);
 		counter = Utils::Utils::GetIntegerMapEntry(arguments, "counter", 0);
 		matchKey = Utils::Utils::GetStringMapEntry(arguments, "matchkey");
-		return true;
 	}
 
 	AccessoryState AccessoryBase::CalculateInvertedAccessoryState(const AccessoryState state) const

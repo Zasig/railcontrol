@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -35,6 +35,7 @@ along with RailControl; see the file LICENCE. If not see
 namespace DataModel
 {
 	class Accessory;
+	class Counter;
 	class Loco;
 	class Signal;
 	class Route;
@@ -67,6 +68,10 @@ class ControlInterface
 		{
 		}
 
+		virtual void CheckHealth()
+		{
+		}
+
 		virtual void Stop()
 		{
 		}
@@ -81,6 +86,10 @@ class ControlInterface
 		virtual const std::string& GetShortName() const
 		{
 			return GetName();
+		}
+
+		virtual void Warning(__attribute__((unused)) Languages::TextSelector textSelector)
+		{
 		}
 
 		virtual void AccessoryDelete(__attribute__((unused)) const AccessoryID accessoryID,
@@ -305,6 +314,20 @@ class ControlInterface
 
 		virtual void TextSettings(__attribute__((unused)) const TextID textID,
 			__attribute__((unused)) const std::string& name)
+		{
+		}
+
+		virtual void CounterDelete(__attribute__((unused)) const CounterID counterID,
+			__attribute__((unused)) const std::string& name)
+		{
+		}
+
+		virtual void CounterSettings(__attribute__((unused)) const CounterID counterID,
+			__attribute__((unused)) const std::string& name)
+		{
+		}
+
+		virtual void CounterState(__attribute__((unused)) const DataModel::Counter* const counter)
 		{
 		}
 

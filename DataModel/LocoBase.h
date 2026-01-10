@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -118,9 +118,9 @@ namespace DataModel
 
 			std::string Serialize() const override;
 
-			bool Deserialize(const std::string& serialized) override;
+			void Deserialize(const std::string& serialized) override;
 
-			bool Deserialize(const std::map<std::string,std::string>& arguments) override;
+			void Deserialize(const std::map<std::string,std::string>& arguments) override;
 
 			virtual void SetName(const std::string& name) override
 			{

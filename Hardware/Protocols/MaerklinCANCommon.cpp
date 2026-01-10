@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -42,17 +42,17 @@ namespace Hardware { namespace Protocols
 		run = false;
 		receiverThread.join();
 		pingThread.join();
-		if (canFileData != nullptr)
+		while (canFiles.size())
 		{
-			free(canFileData);
-			canFileData = nullptr;
+			vector<struct CanFile>::iterator firstCanFile = canFiles.begin();
+			DeleteCanFile(&(*firstCanFile));
 		}
 	}
 
 	void MaerklinCANCommon::Wait(const unsigned int duration) const
 	{
 		unsigned int wait = duration;
-		while (run && (!hasCs2Master || isCs2Master) && wait)
+		while (run && (!hasCs2Main || isCs2Main) && wait)
 		{
 			Utils::Utils::SleepForSeconds(1);
 			--wait;
@@ -74,13 +74,13 @@ namespace Hardware { namespace Protocols
 
 		Wait(1);
 
-		while (run && (!hasCs2Master || isCs2Master))
+		while (run && (!hasCs2Main || isCs2Main))
 		{
 			Ping();
 			Wait(10);
 		}
 
-		if (run && hasCs2Master && !isCs2Master)
+		if (run && hasCs2Main && !isCs2Main)
 		{
 			RequestLoks();
 		}
@@ -162,9 +162,57 @@ namespace Hardware { namespace Protocols
 		address = 0;
 	}
 
+	MaerklinCANCommon::CanFileCrc MaerklinCANCommon::CalcCrc(const unsigned char *data, const size_t length)
+	{
+		// Maerklin uses CRC-16-CCITT with seed 0xffff and with polynom 0x1021 -> x^16 + x^12 +x^5 + 1
+		static const CanFileCrc CrcTable[256] = {
+			0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
+			0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
+			0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
+			0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
+			0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
+			0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
+			0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
+			0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
+			0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
+			0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
+			0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
+			0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
+			0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
+			0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
+			0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
+			0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
+			0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
+			0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
+			0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
+			0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
+			0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
+			0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
+			0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
+			0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
+			0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
+			0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
+			0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
+			0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
+			0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
+			0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
+			0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
+			0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
+		};
+
+		CanFileCrc crc = 0xffff; // seed
+
+		for (size_t count = 0; count < length; ++count)
+		{
+			const CanFileCrc temp = (*data++ ^ (crc >> 8)) & 0xff;
+			crc = CrcTable[temp] ^ (crc << 8);
+		}
+		return crc;
+	}
+
 	MaerklinCANCommon::CanHash MaerklinCANCommon::CalcHash(const CanUid uid)
 	{
-		CanHash calc = (uid >> 16) ^ (uid & 0xFFFF);
+		const CanHash calc = (uid >> 16) ^ (uid & 0xFFFF);
 		CanHash hash = ((calc << 3) | 0x0300) & 0xFF00;
 		hash |= (calc & 0x007F);
 		return hash;
@@ -260,8 +308,10 @@ namespace Hardware { namespace Protocols
 		SendInternal(buffer);
 	}
 
-	void MaerklinCANCommon::AccessoryOnOrOff(const Protocol protocol, const Address address,
-		const DataModel::AccessoryState state, const bool on)
+	void MaerklinCANCommon::Accessory(const Protocol protocol,
+		const Address address,
+		const DataModel::AccessoryState state,
+		const bool on)
 	{
 		unsigned char buffer[CANCommandBufferLength];
 		logger->Info(Languages::TextSettingAccessoryWithProtocol, Utils::Utils::ProtocolToString(protocol), address, Languages::GetGreenRed(state), Languages::GetOnOff(on));
@@ -381,12 +431,12 @@ namespace Hardware { namespace Protocols
 		if (receivedHash == hash)
 		{
 			uint16_t deviceType = Utils::Integer::DataBigEndianToShort(buffer + 11);
-			if (command == CanCommandPing && response == true)
+			if (command == CanCommandPing && response)
 			{
-				if (deviceType == CanDeviceCs2Master)
+				if (deviceType == CanDeviceCs2Main)
 				{
-					hasCs2Master = true;
-					logger->Info(Languages::TextCs2MasterFound);
+					hasCs2Main = true;
+					logger->Info(Languages::TextCs2MainFound);
 				}
 			}
 			else if (command != CanCommandConfigData)
@@ -553,58 +603,10 @@ namespace Hardware { namespace Protocols
 		// version 4.3
 		sendBuffer[9] = 4;
 		sendBuffer[10] = 3;
-		// CS2 device type: Master = 0xffff, Slave = 0xfff0
+		// CS2 device type: Main = 0xffff, Secondary = 0xfff0
 		sendBuffer[11] = 0xff;
-		sendBuffer[12] = isCs2Master ? 0xff : 0xf0;
+		sendBuffer[12] = isCs2Main ? 0xff : 0xf0;
 		SendInternal(sendBuffer);
-	}
-
-	uint16_t MaerklinCANCommon::CalcCRC(const unsigned char* data, const size_t length)
-	{
-		// Maerklin uses CCIT CRC, which is polynom 0x1021 -> x^16 + x^12 +x^5 + 1
-		static const uint16_t CRCTable[256] = {
-			0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
-			0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
-			0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
-			0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
-			0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
-			0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
-			0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
-			0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
-			0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
-			0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
-			0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
-			0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
-			0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
-			0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
-			0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
-			0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
-			0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
-			0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
-			0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
-			0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
-			0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
-			0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
-			0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
-			0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
-			0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
-			0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
-			0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
-			0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
-			0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
-			0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
-			0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
-			0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
-		};
-
-		uint16_t crc = 0xFFFF; // seed
-
-		for (size_t count = 0; count < length; ++count)
-		{
-			const uint16_t temp = (*data++ ^ (crc >> 8)) & 0xff;
-			crc = CRCTable[temp] ^ (crc << 8);
-		}
-		return crc;
 	}
 
 	void MaerklinCANCommon::ParseCommandRequestConfigData(const unsigned char* const buffer)
@@ -701,7 +703,7 @@ namespace Hardware { namespace Protocols
 		// copy compressed data to out buffer
 		std::memcpy(dataToSend + 4, dataCompressedPtr, dataCompressedSize);
 
-		uint16_t crc = CalcCRC(dataToSend, dataToSendSize);
+		const CanFileCrc crc = CalcCrc(dataToSend, dataToSendSize);
 
 		// send first data packet
 		CreateCommandHeader(sendBuffer, CanCommandConfigData, CanResponseCommand, 6);
@@ -721,18 +723,58 @@ namespace Hardware { namespace Protocols
 		free(dataToSend);
 	}
 
+	void MaerklinCANCommon::DeleteCanFile(MaerklinCANCommon::CanFile* canFile)
+	{
+		if (!canFile)
+		{
+			return;
+		}
+		if (!canFile->data)
+		{
+			return;
+		}
+		free(canFile->data);
+		canFiles.erase(static_cast<vector<Hardware::Protocols::MaerklinCANCommon::CanFile>::iterator>(canFile));
+	}
+
+	struct MaerklinCANCommon::CanFile* MaerklinCANCommon::GetCanFile(const CanHash canHash)
+	{
+
+		for (struct CanFile& canFile : canFiles)
+		{
+			if (canFile.hash != canHash)
+			{
+				// another canFile, go to next
+				continue;
+			}
+
+			// canFile found
+			return &canFile;
+		}
+
+		// create and add canFile to vector
+		struct CanFile canFile;
+		memset(&canFile, 0, sizeof(struct CanFile));
+		canFile.hash = canHash;
+		canFiles.push_back(canFile);
+		std::vector<struct CanFile>::iterator lastCanFile = canFiles.end() - 1;
+		return &(*lastCanFile);
+	}
+
 	void MaerklinCANCommon::ParseCommandConfigData(const unsigned char* const buffer)
 	{
-		CanLength length = ParseLength(buffer);
+		const CanHash canHash = ParseHash(buffer);
+		struct CanFile* canFile = GetCanFile(canHash);
+		const CanLength length = ParseLength(buffer);
 		switch (length)
 		{
 			case 6:
 			case 7:
-				ParseCommandConfigDataFirst(buffer);
+				ParseCommandConfigDataFirst(buffer, canFile);
 				return;
 
 			case 8:
-				ParseCommandConfigDataNext(buffer);
+				ParseCommandConfigDataNext(buffer, canFile);
 				return;
 
 			default:
@@ -741,44 +783,54 @@ namespace Hardware { namespace Protocols
 		return;
 	}
 
-	void MaerklinCANCommon::ParseCommandConfigDataFirst(const unsigned char* const buffer)
+	void MaerklinCANCommon::ParseCommandConfigDataFirst(const unsigned char* const buffer,
+		struct CanFile* canFile)
 	{
-		if (canFileData != nullptr)
+		if (!canFile)
 		{
-			free(canFileData);
+			return;
 		}
-		canFileDataSize = Utils::Integer::DataBigEndianToInt(buffer + 5);
-		canFileCrc = Utils::Integer::DataBigEndianToShort(buffer + 9);
-		canFileCrcSize = (canFileDataSize + 8) & 0xFFFFFFF8;
-		canFileData = reinterpret_cast<unsigned char*>(malloc(canFileCrcSize));
-		canFileDataPointer = canFileData;
+		if (canFile->data)
+		{
+			free(canFile->data);
+		}
+		canFile->dataSize = Utils::Integer::DataBigEndianToInt(buffer + 5);
+		canFile->crc = Utils::Integer::DataBigEndianToShort(buffer + 9);
+		canFile->crcSize = (canFile->dataSize + 8) & 0xFFFFFFF8;
+		canFile->data = reinterpret_cast<unsigned char*>(malloc(canFile->crcSize));
+		canFile->dataPointer = canFile->data;
 	}
 
-	void MaerklinCANCommon::ParseCommandConfigDataNext(const unsigned char* const buffer)
+	void MaerklinCANCommon::ParseCommandConfigDataNext(const unsigned char* const buffer,
+		struct CanFile* canFile)
 	{
-		if (canFileData == nullptr)
+		if (!canFile)
+		{
+			return;
+		}
+		if (!canFile->data)
 		{
 			return;
 		}
 
-		Utils::Utils::Copy8Bytes(buffer + 5, canFileDataPointer);
-		canFileDataPointer += 8;
-		if (canFileDataSize > static_cast<size_t>(canFileDataPointer - canFileData))
+		Utils::Utils::Copy8Bytes(buffer + 5, canFile->dataPointer);
+		canFile->dataPointer += 8;
+		if (canFile->dataSize > static_cast<size_t>(canFile->dataPointer - canFile->data))
 		{
 			return;
 		}
 
-		const CanFileCrc calculatedCrc = CalcCrc(canFileData, canFileCrcSize);
-		if (canFileCrc != calculatedCrc)
+		const CanFileCrc calculatedCrc = CalcCrc(canFile->data, canFile->crcSize);
+		if (canFile->crc != calculatedCrc)
 		{
-			logger->Info(Languages::TextCrcMissmatch, Utils::Integer::IntegerToHex(canFileCrc), Utils::Integer::IntegerToHex(calculatedCrc));
-			CleanUpCanFileData();
+			logger->Info(Languages::TextCrcMissmatch, Utils::Integer::IntegerToHex(canFile->crc), Utils::Integer::IntegerToHex(calculatedCrc));
+			DeleteCanFile(canFile);
 			return;
 		}
 
-		size_t canFileUncompressedSize = Utils::Integer::DataBigEndianToInt(canFileData);
+		size_t canFileUncompressedSize = Utils::Integer::DataBigEndianToInt(canFile->data);
 		logger->Info(Languages::TextConfigFileReceivedWithSize, canFileUncompressedSize);
-		string file = ZLib::UnCompress(reinterpret_cast<char*>(canFileData + 4), canFileDataSize, canFileUncompressedSize);
+		string file = ZLib::UnCompress(reinterpret_cast<char*>(canFile->data + 4), canFile->dataSize, canFileUncompressedSize);
 		deque<string> lines;
 		Utils::Utils::SplitString(file, "\n", lines);
 		for (std::string& line : lines)
@@ -787,7 +839,7 @@ namespace Hardware { namespace Protocols
 		}
 
 		ParseCs2File(lines);
-		CleanUpCanFileData();
+		DeleteCanFile(canFile);
 	}
 
 	void MaerklinCANCommon::ParseResponseS88Event(const unsigned char* const buffer)
@@ -808,9 +860,12 @@ namespace Hardware { namespace Protocols
 			onOff = Languages::GetText(Languages::TextOff);
 			state = DataModel::Feedback::FeedbackStateFree;
 		}
-		FeedbackPin pin = ParseFeedbackPin(buffer);
-		logger->Info(Languages::TextFeedbackChange, pin & 0x000F, pin >> 4, onOff);
-		manager->FeedbackState(controlID, pin, state);
+		FeedbackDevice device;
+		FeedbackBus bus;
+		FeedbackPin pin;
+		ParseFeedbackPin(buffer, device, bus, pin);
+		logger->Info(Languages::TextFeedbackChangeCS2, pin & 0x00000007, (pin >> 3) & 0x0000003F, bus, device, onOff);
+		manager->FeedbackState(controlID, pin, device, bus, state);
 	}
 
 	void MaerklinCANCommon::ParseResponseReadConfig(const unsigned char* const buffer)
@@ -836,7 +891,7 @@ namespace Hardware { namespace Protocols
 				break;
 
 			case CanDeviceGleisbox:
-				case CanDeviceGleisbox_2:
+			case CanDeviceGleisbox_2:
 				deviceString = const_cast<char*>("Gleisbox");
 				break;
 
@@ -845,9 +900,9 @@ namespace Hardware { namespace Protocols
 				break;
 
 			case CanDeviceMs2:
-				case CanDeviceMs2_2:
-				case CanDeviceMs2_3:
-				case CanDeviceMs2_4:
+			case CanDeviceMs2_2:
+			case CanDeviceMs2_3:
+			case CanDeviceMs2_4:
 				deviceString = const_cast<char*>("MS2");
 				break;
 
@@ -855,19 +910,19 @@ namespace Hardware { namespace Protocols
 				deviceString = const_cast<char*>("Wireless");
 				break;
 
-			case CanDeviceCs2Master:
-				deviceString = const_cast<char*>("CS2 Master");
-				hasCs2Master = true;
+			case CanDeviceCs2Main:
+				deviceString = const_cast<char*>("CS2 Main");
+				hasCs2Main = true;
 				break;
 
-			case CanDeviceCs2Slave:
-				case CanDeviceCs2Slave_2:
-				deviceString = const_cast<char*>("CS2 Slave");
+			case CanDeviceCs2Secondary:
+			case CanDeviceCs2Secondary_2:
+				deviceString = const_cast<char*>("CS2 Secondary");
 				break;
 
 			case CanDeviceLinkS88:
 				deviceString = const_cast<char*>("Link S88");
-				hasCs2Master = true;
+				hasCs2Main = true;
 				break;
 
 			default:
@@ -916,7 +971,7 @@ namespace Hardware { namespace Protocols
 			string key;
 			string value;
 			bool ok = ParseCs2FileSubkeyValue(line, key, value);
-			if (ok == false)
+			if (!ok)
 			{
 				break;
 			}
@@ -947,11 +1002,11 @@ namespace Hardware { namespace Protocols
 		cacheEntry.SetFunction(nr, type, icon, timer);
 		if (type == DataModel::LocoFunctionTypeTimer)
 		{
-			logger->Info(Languages::TextCs2MasterLocoFunctionIconTypeTimer, nr, icon, timer);
+			logger->Info(Languages::TextCs2MainLocoFunctionIconTypeTimer, nr, icon, timer);
 		}
 		else
 		{
-			logger->Info(Languages::TextCs2MasterLocoFunctionIconType, nr, icon, type);
+			logger->Info(Languages::TextCs2MainLocoFunctionIconType, nr, icon, type);
 		}
 	}
 
@@ -967,7 +1022,7 @@ namespace Hardware { namespace Protocols
 			string key;
 			string value;
 			bool ok = ParseCs2FileSubkeyValue(line, key, value);
-			if (ok == false)
+			if (!ok)
 			{
 				break;
 			}
@@ -976,12 +1031,12 @@ namespace Hardware { namespace Protocols
 				Address input = Utils::Integer::HexToInteger(value);
 				LocoType type;
 				ParseAddressProtocol(input, address, protocol, type);
-				logger->Info(Languages::TextCs2MasterLocoSlaveProtocolAddress, Utils::Utils::ProtocolToString(protocol), address);
+				logger->Info(Languages::TextCs2MainLocoSlaveProtocolAddress, Utils::Utils::ProtocolToString(protocol), address);
 			}
 			else if (key.compare("lokname") == 0)
 			{
 				name = value;
-				logger->Info(Languages::TextCs2MasterLocoSlaveName, name);
+				logger->Info(Languages::TextCs2MainLocoSlaveName, name);
 			}
 			lines.pop_front();
 		}
@@ -1010,12 +1065,12 @@ namespace Hardware { namespace Protocols
 				name = value;
 				cacheEntry.SetName(value);
 				cacheEntry.SetMatchKey(value);
-				logger->Info(Languages::TextCs2MasterLocoName, value);
+				logger->Info(Languages::TextCs2MainLocoName, value);
 			}
 			else if (key.compare("vorname") == 0)
 			{
 				oldName = value;
-				logger->Info(Languages::TextCs2MasterLocoOldName, value);
+				logger->Info(Languages::TextCs2MainLocoOldName, value);
 			}
 			else if (key.compare("toRemove") == 0)
 			{
@@ -1031,7 +1086,7 @@ namespace Hardware { namespace Protocols
 				cacheEntry.SetAddress(address);
 				cacheEntry.SetProtocol(protocol);
 				cacheEntry.SetType(type);
-				logger->Info(Languages::TextCs2MasterLocoProtocolAddress, Utils::Utils::ProtocolToString(protocol), address);
+				logger->Info(Languages::TextCs2MainLocoProtocolAddress, Utils::Utils::ProtocolToString(protocol), address);
 			}
 			else if ((key.compare("funktionen") == 0)
 				|| (key.compare("funktionen_2") == 0)
@@ -1051,7 +1106,7 @@ namespace Hardware { namespace Protocols
 
 		if (remove)
 		{
-			logger->Info(Languages::TextCs2MasterLocoRemove, name);
+			logger->Info(Languages::TextCs2MainLocoRemove, name);
 			LocoID locoId = CacheDelete(name);
 			manager->LocoDelete(locoId);
 		}
@@ -1074,7 +1129,7 @@ namespace Hardware { namespace Protocols
 			string key;
 			string value;
 			bool ok = ParseCs2FileKeyValue(line, key, value);
-			if (ok == false)
+			if (!ok)
 			{
 				return;
 			}
@@ -1092,7 +1147,7 @@ namespace Hardware { namespace Protocols
 			string key;
 			string value;
 			bool ok = ParseCs2FileKeyValue(line, key, value);
-			if (ok == false)
+			if (!ok)
 			{
 				return;
 			}
@@ -1150,53 +1205,6 @@ namespace Hardware { namespace Protocols
 			}
 			return;
 		}
-	}
-
-	uint16_t MaerklinCANCommon::CalcCrc(const unsigned char *data, const size_t length)
-	{
-		// Maerklin uses CRC-16-CCITT with seed 0xFFFF and with polynom 0x1021 -> x^16 + x^12 +x^5 + 1
-		static const uint16_t CrcTable[256] = {
-			0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
-			0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
-			0x1231, 0x0210, 0x3273, 0x2252, 0x52b5, 0x4294, 0x72f7, 0x62d6,
-			0x9339, 0x8318, 0xb37b, 0xa35a, 0xd3bd, 0xc39c, 0xf3ff, 0xe3de,
-			0x2462, 0x3443, 0x0420, 0x1401, 0x64e6, 0x74c7, 0x44a4, 0x5485,
-			0xa56a, 0xb54b, 0x8528, 0x9509, 0xe5ee, 0xf5cf, 0xc5ac, 0xd58d,
-			0x3653, 0x2672, 0x1611, 0x0630, 0x76d7, 0x66f6, 0x5695, 0x46b4,
-			0xb75b, 0xa77a, 0x9719, 0x8738, 0xf7df, 0xe7fe, 0xd79d, 0xc7bc,
-			0x48c4, 0x58e5, 0x6886, 0x78a7, 0x0840, 0x1861, 0x2802, 0x3823,
-			0xc9cc, 0xd9ed, 0xe98e, 0xf9af, 0x8948, 0x9969, 0xa90a, 0xb92b,
-			0x5af5, 0x4ad4, 0x7ab7, 0x6a96, 0x1a71, 0x0a50, 0x3a33, 0x2a12,
-			0xdbfd, 0xcbdc, 0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a,
-			0x6ca6, 0x7c87, 0x4ce4, 0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41,
-			0xedae, 0xfd8f, 0xcdec, 0xddcd, 0xad2a, 0xbd0b, 0x8d68, 0x9d49,
-			0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13, 0x2e32, 0x1e51, 0x0e70,
-			0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a, 0x9f59, 0x8f78,
-			0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e, 0xe16f,
-			0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
-			0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e,
-			0x02b1, 0x1290, 0x22f3, 0x32d2, 0x4235, 0x5214, 0x6277, 0x7256,
-			0xb5ea, 0xa5cb, 0x95a8, 0x8589, 0xf56e, 0xe54f, 0xd52c, 0xc50d,
-			0x34e2, 0x24c3, 0x14a0, 0x0481, 0x7466, 0x6447, 0x5424, 0x4405,
-			0xa7db, 0xb7fa, 0x8799, 0x97b8, 0xe75f, 0xf77e, 0xc71d, 0xd73c,
-			0x26d3, 0x36f2, 0x0691, 0x16b0, 0x6657, 0x7676, 0x4615, 0x5634,
-			0xd94c, 0xc96d, 0xf90e, 0xe92f, 0x99c8, 0x89e9, 0xb98a, 0xa9ab,
-			0x5844, 0x4865, 0x7806, 0x6827, 0x18c0, 0x08e1, 0x3882, 0x28a3,
-			0xcb7d, 0xdb5c, 0xeb3f, 0xfb1e, 0x8bf9, 0x9bd8, 0xabbb, 0xbb9a,
-			0x4a75, 0x5a54, 0x6a37, 0x7a16, 0x0af1, 0x1ad0, 0x2ab3, 0x3a92,
-			0xfd2e, 0xed0f, 0xdd6c, 0xcd4d, 0xbdaa, 0xad8b, 0x9de8, 0x8dc9,
-			0x7c26, 0x6c07, 0x5c64, 0x4c45, 0x3ca2, 0x2c83, 0x1ce0, 0x0cc1,
-			0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
-			0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
-		};
-
-		uint16_t crc = 0xFFFF;
-		for (size_t count = 0; count < length; ++count)
-		{
-			const uint16_t temp = (*data++ ^ (crc >> 8)) & 0xFF;
-			crc = CrcTable[temp] ^ (crc << 8);
-		}
-		return crc;
 	}
 
 	const DataModel::LocoFunctionIcon MaerklinCANCommon::LocoFunctionMapCs2ToRailControl[MaxNrOfCs2FunctionIcons] =

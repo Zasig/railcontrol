@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -44,7 +44,7 @@ namespace DataModel
 			{
 				public:
 					inline LayoutRotation()
-					:	rotation(Rotation0)
+					:	rotation(Rotation90)
 					{
 					}
 
@@ -60,7 +60,7 @@ namespace DataModel
 
 					inline LayoutRotation& operator=(const int rotation)
 					{
-						this->rotation = (rotation > RotationNotRelevant || rotation < Rotation0) ? Rotation0 : static_cast<LayoutRotationEnum>(rotation);
+						this->rotation = static_cast<LayoutRotationEnum>(rotation & 0x03);
 						return *this;
 					}
 
@@ -120,7 +120,7 @@ namespace DataModel
 				posZ(0),
 				width(Width1),
 				height(Height1),
-				rotation(Rotation0)
+				rotation(Rotation90)
 			{
 			}
 
@@ -148,7 +148,7 @@ namespace DataModel
 
 			virtual bool CheckPositionFree(const LayoutPosition posX, const LayoutPosition posY, const LayoutPosition posZ);
 			virtual std::string Serialize() const override;
-			virtual bool Deserialize(const std::string& serialized) override;
+			virtual void Deserialize(const std::string& serialized) override;
 			virtual std::string GetLayoutType() const = 0;
 
 			inline void SetVisible(const Visible visible)
@@ -195,12 +195,12 @@ namespace DataModel
 				const LayoutPosition y,
 				const LayoutPosition z) const
 			{
-				return posX == x && posY == y && posZ == z;
+				return (posX == x) && (posY == y) && (posZ == z);
 			}
 
 			inline bool IsVisibleOnLayer(const LayoutPosition z) const
 			{
-				return posZ == z && visible == VisibleYes;
+				return (posZ == z) && (visible == VisibleYes);
 			}
 
 			inline void SetWidth(const LayoutItemSize width)
@@ -246,7 +246,7 @@ namespace DataModel
 			static std::string Rotation(LayoutRotation rotation);
 
 		protected:
-			virtual bool Deserialize(const std::map<std::string,std::string>& arguments) override;
+			virtual void Deserialize(const std::map<std::string,std::string>& arguments) override;
 			
 		private:
 			Visible visible;

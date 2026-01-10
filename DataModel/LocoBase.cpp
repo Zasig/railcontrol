@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -71,14 +71,14 @@ namespace DataModel
 		return str;
 	}
 
-	bool LocoBase::Deserialize(const std::string& serialized)
+	void LocoBase::Deserialize(const std::string& serialized)
 	{
 		map<string, string> arguments;
 		ParseArguments(serialized, arguments);
-		return LocoBase::Deserialize(arguments);
+		LocoBase::Deserialize(arguments);
 	}
 
-	bool LocoBase::Deserialize(const std::map<std::string,std::string>& arguments)
+	void LocoBase::Deserialize(const std::map<std::string,std::string>& arguments)
 	{
 		Object::Deserialize(arguments);
 		HardwareHandle::Deserialize(arguments);
@@ -95,7 +95,6 @@ namespace DataModel
 		propulsion = static_cast<Propulsion>(Utils::Utils::GetIntegerMapEntry(arguments, "propulsion", PropulsionUnknown));
 		trainType = static_cast<TrainType>(Utils::Utils::GetIntegerMapEntry(arguments, "type", TrainTypeUnknown));
 		matchKey = Utils::Utils::GetStringMapEntry(arguments, "matchkey");
-		return true;
 	}
 
 	bool LocoBase::SetTrack(const TrackID trackID)
@@ -305,10 +304,11 @@ namespace DataModel
 							logger->Info(Languages::TextIsNowInManualMode);
 							state = LocoStateTerminated;
 							requestManualMode = false;
+							wait = 0;
 							return;
 
 						case LocoStateAutomodeGetFirst:
-							if (requestManualMode)
+							if (requestManualMode || (followUpRoute == RouteStop))
 							{
 								state = LocoStateOff;
 								break;
@@ -469,17 +469,17 @@ namespace DataModel
 			return;
 		}
 
-		bool isOrientationSet = newTrack->SetLocoOrientation(static_cast<Orientation>(route->GetToOrientation()));
+		bool isOrientationSet = newTrack->SetLocoBaseOrientation(route->GetToOrientation());
 		if (!isOrientationSet)
 		{
 			return;
 		}
 
-		bool turnLoco = (trackFrom->GetLocoOrientation() != route->GetFromOrientation());
+		bool turnLoco = (trackFrom->GetLocoBaseOrientation() != route->GetFromOrientation());
 		Orientation newLocoOrientation = static_cast<Orientation>(orientation != turnLoco);
 		if (turnLoco)
 		{
-			bool canTurnOrientation = trackFrom->SetLocoOrientation(route->GetFromOrientation());
+			bool canTurnOrientation = trackFrom->SetLocoBaseOrientation(route->GetFromOrientation());
 			if (!canTurnOrientation)
 			{
 				return;
@@ -571,8 +571,8 @@ namespace DataModel
 			return;
 		}
 
-		const bool isOrientationSet = newTrack->SetLocoOrientation(static_cast<Orientation>(route->GetToOrientation()));
-		if (isOrientationSet == false)
+		const bool isOrientationSet = newTrack->SetLocoBaseOrientation(route->GetToOrientation());
+		if (!isOrientationSet)
 		{
 			return;
 		}
@@ -639,42 +639,48 @@ namespace DataModel
 
 	bool LocoBase::ReserveRoute(const Track* const track, const bool allowLocoTurn, Route* const route)
 	{
-		logger->Debug(Languages::TextReservingRoute, route->GetName());
-
+		const string& routeName = route->GetName();
+		logger->Debug(Languages::TextTryingToReserveRoute, routeName);
 		const ObjectIdentifier locoBaseIdentifier = GetObjectIdentifier();
 		if (!route->Reserve(logger, locoBaseIdentifier))
 		{
+			logger->Debug(Languages::TextUnableToReserveRoute, routeName);
 			return false;
 		}
 
-		Track* newTrack = manager->GetTrack(route->GetToTrack());
-		if (!newTrack)
+		Track* toTrack = manager->GetTrack(route->GetToTrack());
+		if (!toTrack)
 		{
+			logger->Debug(Languages::TextUnableToFindDestinationTrack);
 			route->Release(logger, locoBaseIdentifier);
 			return false;
 		}
 
-		bool canSetOrientation = newTrack->CanSetLocoBaseOrientation(route->GetToOrientation(), locoBaseIdentifier);
+		bool canSetOrientation = toTrack->CanSetLocoBaseOrientation(route->GetToOrientation(), locoBaseIdentifier);
 		if (!canSetOrientation)
 		{
+			logger->Debug(Languages::TextUnableToSetDestinationOrientation, toTrack->GetName());
 			route->Release(logger, locoBaseIdentifier);
-			newTrack->Release(logger, locoBaseIdentifier);
+			toTrack->Release(logger, locoBaseIdentifier);
 			return false;
 		}
 
-		if (!allowLocoTurn && track->GetLocoOrientation() != route->GetFromOrientation())
+		if (!allowLocoTurn && track->GetLocoBaseOrientation() != route->GetFromOrientation())
 		{
+			logger->Debug(Languages::TextDifferentOrientations, routeName);
 			route->Release(logger, locoBaseIdentifier);
-			newTrack->Release(logger, locoBaseIdentifier);
+			toTrack->Release(logger, locoBaseIdentifier);
 			return false;
 		}
 
+		logger->Debug(Languages::TextRouteReserved, routeName);
 		return true;
 	}
 
 	bool LocoBase::ExecuteRoute(const Track* const track, const bool allowLocoTurn, Route* const route)
 	{
-		if (route->GetLockState() == LockableItem::LockStateFree)
+		const LockableItem::LockState lockState = route->GetLockState();
+		if (lockState == LockableItem::LockStateFree)
 		{
 			if (!ReserveRoute(track, allowLocoTurn, route))
 			{
@@ -682,7 +688,7 @@ namespace DataModel
 			}
 		}
 
-		if (route->GetLockState() == LockableItem::LockStateReserved)
+		if (lockState == LockableItem::LockStateReserved)
 		{
 			if (!route->Lock(logger, GetObjectIdentifier()))
 			{

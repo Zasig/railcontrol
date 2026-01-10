@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -54,7 +54,7 @@ namespace Hardware
 
 			virtual void Start() override
 			{
-				if (instance == nullptr)
+				if (!instance)
 				{
 					return;
 				}
@@ -67,6 +67,8 @@ namespace Hardware
 				Init(params);
 				Start();
 			}
+
+			void CheckHealth() override;
 
 			inline ControlID GetControlID() const
 			{
@@ -174,9 +176,32 @@ namespace Hardware
 
 			static const std::string Unknown;
 
-			void Init(const HardwareParams* params);
+			inline void Init(const HardwareParams* params)
+			{
+				this->params = params;
+				Init();
+			}
+
+			void Init();
+
 			void Close();
+
 			bool ProgramCheckValues(const ProgramMode mode, const CvNumber cv, const CvValue value = 1);
+
+			void AccessoryBaseState(const Protocol protocol,
+				const Address address,
+				const DataModel::AccessoryState state,
+				const DataModel::AccessoryPulseDuration duration);
+
+			static inline void AccessoryBaseStateStatic(HardwareInterface* instance,
+				const Protocol protocol,
+				const Address address,
+				const DataModel::AccessoryState state,
+				const DataModel::AccessoryPulseDuration duration)
+			{
+				Utils::Utils::SleepForMilliseconds(duration);
+				instance->Accessory(protocol, address, state, false, 0);
+			}
 	};
 } // namespace Hardware
 

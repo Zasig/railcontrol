@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -21,6 +21,7 @@ along with RailControl; see the file LICENCE. If not see
 #pragma once
 
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -55,6 +56,7 @@ namespace Logger
 				{
 					return;
 				}
+				std::lock_guard<std::mutex> guard(clientMutex);
 				clients.push_back(new LoggerClientFile(fileName));
 				fileLoggerStarted = true;
 			}
@@ -65,6 +67,7 @@ namespace Logger
 				{
 					return;
 				}
+				std::lock_guard<std::mutex> guard(clientMutex);
 				clients.push_back(new LoggerClientConsole());
 				consoleLoggerStarted = true;
 			}
@@ -82,5 +85,7 @@ namespace Logger
 			bool consoleLoggerStarted;
 			std::vector<LoggerClient*> clients;
 			std::vector<Logger*> loggers;
+
+			std::mutex clientMutex;
 	};
 }

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -20,6 +20,7 @@ along with RailControl; see the file LICENCE. If not see
 
 #include <future>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <unistd.h>
 
@@ -45,6 +46,7 @@ using Visible = DataModel::LayoutItem::Visible;
 using Hardware::HardwareHandler;
 using Hardware::HardwareParams;
 using std::map;
+using std::pair;
 using std::to_string;
 using std::string;
 using std::stringstream;
@@ -66,6 +68,7 @@ Manager::Manager(Config& config)
 	nrOfTracksToReserve(DataModel::Loco::ReserveOne),
 	run(false),
 	debounceRun(false),
+	controlCheckerRun(false),
 	initLocosDone(false),
 	serverEnabled(false),
 	unknownControl(Languages::GetText(Languages::TextControlDoesNotExist)),
@@ -161,9 +164,16 @@ Manager::Manager(Config& config)
 	}
 
 	storage->AllTracks(tracks);
-	for (auto& track : tracks)
+	for (auto& t : tracks)
 	{
-		logger->Info(Languages::TextLoadedTrack, track.second->GetID(), track.second->GetName());
+		Track* track = t.second;
+		track->UpdateMain();
+		Track* main = track->GetMain();
+		if (main)
+		{
+			main->AddExtension(track);
+		}
+		logger->Info(Languages::TextLoadedTrack, track->GetID(), track->GetName());
 	}
 
 	storage->AllSwitches(switches);
@@ -182,6 +192,12 @@ Manager::Manager(Config& config)
 	for (auto& route : routes)
 	{
 		logger->Info(Languages::TextLoadedRoute, route.second->GetID(), route.second->GetName());
+	}
+
+	storage->AllCounters(counters);
+	for (auto& counter : counters)
+	{
+		logger->Info(Languages::TextLoadedCounter, counter.second->GetID(), counter.second->GetName());
 	}
 
 	storage->AllLocos(locos);
@@ -207,6 +223,9 @@ Manager::Manager(Config& config)
 		}
 	}
 
+	controlCheckerRun = true;
+	controlCheckerThread = std::thread(&Manager::ControlCheckerWorker, this);
+
 	run = true;
 	InitLocos();
 }
@@ -217,6 +236,9 @@ Manager::~Manager()
 	{
 		Utils::Utils::SleepForSeconds(1);
 	}
+
+	controlCheckerRun = false;
+	controlCheckerThread.join();
 
 	debounceRun = false;
 	debounceThread.join();
@@ -268,6 +290,7 @@ Manager::~Manager()
 		Storage::TransactionGuard guard(storage);
 		DeleteAllMapEntries(multipleUnits, multipleUnitMutex);
 		DeleteAllMapEntries(locos, locoMutex);
+		DeleteAllMapEntries(counters, counterMutex);
 		DeleteAllMapEntries(routes, routeMutex);
 		DeleteAllMapEntries(clusters, clusterMutex);
 		DeleteAllMapEntries(switches, switchMutex);
@@ -286,6 +309,16 @@ Manager::~Manager()
 
 	delete storage;
 	storage = nullptr;
+}
+
+void Manager::Warning(Languages::TextSelector textSelector)
+{
+	logger->Warning(textSelector);
+	std::lock_guard<std::mutex> guard(controlMutex);
+	for (auto& control : controls)
+	{
+		control.second->Warning(textSelector);
+	}
 }
 
 /***************************
@@ -395,7 +428,7 @@ bool Manager::ControlSave(ControlID controlID,
 	// if we have a new object we have to update controlID
 	controlID = params->GetControlID();
 
-	params->SetName(CheckObjectName(hardwareParams, hardwareMutex, controlID, name.size() == 0 ? "C" : name));
+	params->SetName(CheckObjectName(hardwareParams, hardwareMutex, controlID, name.size() == 0 ? Languages::GetText(Languages::TextControl) : name));
 	params->SetHardwareType(hardwareType);
 	params->SetArg1(arg1);
 	params->SetArg2(arg2);
@@ -797,7 +830,7 @@ bool Manager::LocoSave(LocoID locoID,
 	// if we have a new object we have to update locoID
 	locoID = loco->GetID();
 
-	loco->SetName(CheckObjectName(multipleUnits, multipleUnitMutex, MultipleUnitNone, CheckObjectName(locos, locoMutex, locoID, name.size() == 0 ? "L" : name)));
+	loco->SetName(CheckObjectName(multipleUnits, multipleUnitMutex, MultipleUnitNone, CheckObjectName(locos, locoMutex, locoID, name.size() == 0 ? Languages::GetText(Languages::TextLoco) : name)));
 	loco->SetControlID(controlID);
 	loco->SetMatchKey(matchKey);
 	loco->SetProtocol(protocol);
@@ -1087,7 +1120,7 @@ bool Manager::MultipleUnitSave(MultipleUnitID multipleUnitID,
 	}
 
 	// FIXME: replace "M" with language dependent word
-	multipleUnit->SetName(CheckObjectName(locos, locoMutex, LocoNone, CheckObjectName(multipleUnits, multipleUnitMutex, multipleUnitID, name.size() == 0 ? "M" : name)));
+	multipleUnit->SetName(CheckObjectName(locos, locoMutex, LocoNone, CheckObjectName(multipleUnits, multipleUnitMutex, multipleUnitID, name.size() == 0 ? Languages::GetText(Languages::TextMultipleUnit) : name)));
 	multipleUnit->SetControlID(controlID);
 	multipleUnit->SetMatchKey(matchKey);
 	multipleUnit->SetProtocol(ProtocolNone);
@@ -1191,7 +1224,7 @@ void Manager::AccessoryBaseState(const ControlType controlType,
 	const Address address,
 	const DataModel::AccessoryState state)
 {
-	Accessory* accessory = GetAccessory(controlID, protocol, address);
+	Accessory* accessory = GetAccessory(controlID, protocol, address, static_cast<AddressPort>(state));
 	if (accessory)
 	{
 		AccessoryState(controlType, accessory, accessory->CalculateInvertedAccessoryState(state), true);
@@ -1246,6 +1279,7 @@ bool Manager::AccessoryState(const ControlType controlType, const AccessoryID ac
 {
 	if (boosterState == BoosterStateStop)
 	{
+		Warning(Languages::TextBoosterIsTurnedOff);
 		return false;
 	}
 	Accessory* accessory = GetAccessory(accessoryID);
@@ -1307,16 +1341,35 @@ Accessory* Manager::GetAccessory(const AccessoryID accessoryID) const
 	return accessories.at(accessoryID);
 }
 
-Accessory* Manager::GetAccessory(const ControlID controlID, const Protocol protocol, const Address address) const
+Accessory* Manager::GetAccessory(const ControlID controlID,
+	const Protocol protocol,
+	const Address address,
+	const AddressPort port) const
 {
 	std::lock_guard<std::mutex> guard(accessoryMutex);
-	for (auto& accessory : accessories)
+	for (auto& a : accessories)
 	{
-		if (accessory.second->GetControlID() == controlID
-			&& accessory.second->GetProtocol() == protocol
-			&& accessory.second->GetAddress() == address)
+		Accessory* accessory = a.second;
+		if (accessory->GetControlID() == controlID
+			&& accessory->GetProtocol() == protocol
+			&& accessory->GetAddress() == address)
 		{
-			return accessory.second;
+			switch (accessory->GetAccessoryType() & DataModel::AccessoryTypeConnectionMask)
+			{
+				case AccessoryTypeOnOn:
+					return accessory;
+
+				case AccessoryTypeOnPush:
+				case AccessoryTypeOnOff:
+					if (accessory->GetPort() == port)
+					{
+						return accessory;
+					}
+					break;
+
+				default:
+					break;
+			}
 		}
 	}
 	return nullptr;
@@ -1342,6 +1395,7 @@ bool Manager::AccessorySave(AccessoryID accessoryID,
 	const std::string& matchKey,
 	const Protocol protocol,
 	const Address address,
+	const AddressPort port,
 	const Address serverAddress,
 	const DataModel::AccessoryType type,
 	const DataModel::AccessoryPulseDuration duration,
@@ -1374,7 +1428,7 @@ bool Manager::AccessorySave(AccessoryID accessoryID,
 	accessoryID = accessory->GetID();
 
 	// update existing accessory
-	accessory->SetName(CheckObjectName(accessories, accessoryMutex, accessoryID, name.size() == 0 ? "A" : name));
+	accessory->SetName(CheckObjectName(accessories, accessoryMutex, accessoryID, name.size() == 0 ? Languages::GetText(Languages::TextAccessory) : name));
 	accessory->SetPosX(posX);
 	accessory->SetPosY(posY);
 	accessory->SetPosZ(posZ);
@@ -1383,6 +1437,7 @@ bool Manager::AccessorySave(AccessoryID accessoryID,
 	accessory->SetMatchKey(matchKey);
 	accessory->SetProtocol(protocol);
 	accessory->SetAddress(address);
+	accessory->SetPort(port);
 	accessory->SetServerAddress(serverAddress);
 	accessory->SetAccessoryType(type);
 	accessory->SetAccessoryPulseDuration(duration);
@@ -1566,12 +1621,16 @@ void Manager::AccessoryRemoveMatchKey(const AccessoryID accessoryId)
 * Feedback                 *
 ***************************/
 
-void Manager::FeedbackState(const ControlID controlID, const FeedbackPin pin, const DataModel::Feedback::FeedbackState state)
+void Manager::FeedbackState(const ControlID controlID,
+	const FeedbackPin pin,
+	const FeedbackDevice device,
+	const FeedbackBus bus,
+	const DataModel::Feedback::FeedbackState state)
 {
-	Feedback* feedback = GetFeedback(controlID, pin);
+	Feedback* feedback = GetFeedback(controlID, pin, device, bus);
 	if (feedback)
 	{
-		FeedbackState(feedback, state);
+		feedback->SetState(logger, state);
 		return;
 	}
 
@@ -1580,11 +1639,13 @@ void Manager::FeedbackState(const ControlID controlID, const FeedbackPin pin, co
 		return;
 	}
 
-	string name = "Feedback auto added " + std::to_string(controlID) + "/" + std::to_string(pin);
+	// add feedback if it does not exist
+	string name(Languages::GetText(Languages::TextFeedback));
+	name += " " + std::to_string(controlID) + "/" + std::to_string(pin) + "/" + std::to_string(device) + "/" + std::to_string(bus);
 	logger->Info(Languages::TextAddingFeedback, name);
 	string result;
 
-	FeedbackSave(FeedbackNone, name, DataModel::LayoutItem::VisibleNo, 0, 0, 0, DataModel::LayoutItem::Rotation0, controlID, "", pin, false, FeedbackTypeDefault, RouteNone, result);
+	FeedbackSave(FeedbackNone, name, DataModel::LayoutItem::VisibleNo, 0, 0, 0, DataModel::LayoutItem::Rotation0, controlID, "", pin, device, bus, false, FeedbackTypeDefault, RouteNone, result);
 }
 
 void Manager::FeedbackState(const FeedbackID feedbackID, const DataModel::Feedback::FeedbackState state)
@@ -1594,7 +1655,7 @@ void Manager::FeedbackState(const FeedbackID feedbackID, const DataModel::Feedba
 	{
 		return;
 	}
-	FeedbackState(feedback, state);
+	feedback->SetState(logger, state);
 }
 
 void Manager::FeedbackPublishState(const Feedback* feedback)
@@ -1631,15 +1692,18 @@ Feedback* Manager::GetFeedbackUnlocked(const FeedbackID feedbackID) const
 	return feedbacks.at(feedbackID);
 }
 
-Feedback* Manager::GetFeedback(const ControlID controlID, const FeedbackPin pin) const
+Feedback* Manager::GetFeedback(const ControlID controlID,
+	const FeedbackPin pin,
+	const FeedbackDevice device,
+	const FeedbackBus bus) const
 {
 	std::lock_guard<std::mutex> guard(feedbackMutex);
-	for (auto& feedback : feedbacks)
+	for (auto& f : feedbacks)
 	{
-		if (feedback.second->GetControlID() == controlID
-			&& feedback.second->GetPin() == pin)
+		Feedback* feedback = f.second;
+		if (feedback->CheckControl(controlID, device, bus) && (feedback->GetPin() == pin))
 		{
-			return feedback.second;
+			return feedback;
 		}
 	}
 	return nullptr;
@@ -1684,6 +1748,8 @@ bool Manager::FeedbackSave(FeedbackID feedbackID,
 	const ControlID controlID,
 	const string& matchKey,
 	const FeedbackPin pin,
+	const FeedbackDevice device,
+	const FeedbackBus bus,
 	const bool inverted,
 	const FeedbackType feedbackType,
 	const RouteID routeId,
@@ -1709,7 +1775,7 @@ bool Manager::FeedbackSave(FeedbackID feedbackID,
 	// if we have a new object we have to update feedbackID
 	feedbackID = feedback->GetID();
 
-	feedback->SetName(CheckObjectName(feedbacks, feedbackMutex, feedbackID, name.size() == 0 ? "F" : name));
+	feedback->SetName(CheckObjectName(feedbacks, feedbackMutex, feedbackID, name.size() == 0 ? Languages::GetText(Languages::TextFeedback) : name));
 	feedback->SetVisible(visible);
 	feedback->SetPosX(posX);
 	feedback->SetPosY(posY);
@@ -1718,6 +1784,8 @@ bool Manager::FeedbackSave(FeedbackID feedbackID,
 	feedback->SetControlID(controlID);
 	feedback->SetMatchKey(matchKey);
 	feedback->SetPin(pin);
+	feedback->SetDevice(device);
+	feedback->SetBus(bus);
 	feedback->SetInverted(inverted);
 	feedback->SetFeedbackType(feedbackType);
 	feedback->SetRouteId(routeId);
@@ -1972,13 +2040,40 @@ const map<string,DataModel::Track*> Manager::TrackListByName() const
 	return out;
 }
 
-const map<string,TrackID> Manager::TrackListIdByName() const
+const map<string,DataModel::Track*> Manager::TrackListMasterByName() const
+{
+	map<string,DataModel::Track*> out;
+	std::lock_guard<std::mutex> guard(trackMutex);
+	for (auto& t : tracks)
+	{
+		Track* track = t.second;
+		if (track && !track->GetMain())
+		{
+			out[track->GetName()] = track;
+		}
+	}
+	return out;
+}
+
+const map<string,TrackID> Manager::TrackListIdByName(const TrackID excludeTrackID) const
 {
 	map<string,TrackID> out;
 	std::lock_guard<std::mutex> guard(trackMutex);
-	for (auto& track : tracks)
+	for (auto& t : tracks)
 	{
-		out[track.second->GetName()] = track.second->GetID();
+		Track* track = t.second;
+		const TrackID trackID = track->GetID();
+		if (trackID == excludeTrackID)
+		{
+			continue;
+		}
+
+		// exclude extension tracks
+		if (track->GetMain())
+		{
+			continue;
+		}
+		out[track->GetName()] = trackID;
 	}
 	return out;
 }
@@ -1993,6 +2088,7 @@ bool Manager::TrackSave(TrackID trackID,
 	const LayoutItemSize height,
 	const LayoutRotation rotation,
 	const DataModel::TrackType trackType,
+	const TrackID main,
 	const vector<Relation*>& newFeedbacks,
 	const vector<Relation*>& newSignals,
 	const DataModel::SelectRouteApproach selectRouteApproach,
@@ -2032,7 +2128,7 @@ bool Manager::TrackSave(TrackID trackID,
 	}
 
 	// update existing track
-	track->SetName(CheckObjectName(tracks, trackMutex, trackID, name.size() == 0 ? "T" : name));
+	track->SetName(CheckObjectName(tracks, trackMutex, trackID, name.size() == 0 ? Languages::GetText(Languages::TextTrack) : name));
 	track->SetShowName(showName);
 	track->SetDisplayName(displayName);
 	track->SetHeight(height);
@@ -2041,6 +2137,17 @@ bool Manager::TrackSave(TrackID trackID,
 	track->SetPosY(posY);
 	track->SetPosZ(posZ);
 	track->SetTrackType(trackType);
+	Track* oldMain = track->GetMain();
+	if (oldMain)
+	{
+		oldMain->DeleteExtension(track);
+	}
+	Track* newMain = GetTrack(main);
+	if (newMain && !newMain->GetMain() && newMain->AddExtension(track))
+	{
+		track->SetMain(newMain);
+		track->SetName(newMain->GetName() + "_ext_" + to_string(trackID));
+	}
 	track->AssignFeedbacks(newFeedbacks);
 	track->AssignSignals(newSignals);
 	track->SetSelectRouteApproach(selectRouteApproach);
@@ -2180,6 +2287,7 @@ bool Manager::SwitchState(const ControlType controlType, const SwitchID switchID
 {
 	if (boosterState == BoosterStateStop)
 	{
+		Warning(Languages::TextBoosterIsTurnedOff);
 		return false;
 	}
 
@@ -2295,7 +2403,7 @@ bool Manager::SwitchSave(SwitchID switchID,
 	switchID = mySwitch->GetID();
 
 	// update existing switch
-	mySwitch->SetName(CheckObjectName(switches, switchMutex, switchID, name.size() == 0 ? "S" : name));
+	mySwitch->SetName(CheckObjectName(switches, switchMutex, switchID, name.size() == 0 ? Languages::GetText(Languages::TextSwitch) : name));
 	mySwitch->SetPosX(posX);
 	mySwitch->SetPosY(posY);
 	mySwitch->SetPosZ(posZ);
@@ -2543,6 +2651,7 @@ bool Manager::RouteSave(RouteID routeID,
 	const Length maxTrainLength,
 	const std::vector<DataModel::Relation*>& relationsAtLock,
 	const std::vector<DataModel::Relation*>& relationsAtUnlock,
+	const std::vector<DataModel::Relation*>& conditions,
 	const Visible visible,
 	const LayoutPosition posX,
 	const LayoutPosition posY,
@@ -2585,7 +2694,7 @@ bool Manager::RouteSave(RouteID routeID,
 	Track* oldTrack = GetTrack(route->GetFromTrack());
 	if (oldTrack)
 	{
-		oldTrack->RemoveRoute(route);
+		oldTrack->DeleteRoute(route);
 		TrackSave(oldTrack);
 	}
 
@@ -2604,14 +2713,16 @@ bool Manager::RouteSave(RouteID routeID,
 	}
 
 	// update existing route
-	route->SetName(CheckObjectName(routes, routeMutex, routeID, name.size() == 0 ? "S" : name));
+	route->SetName(CheckObjectName(routes, routeMutex, routeID, name.size() == 0 ? Languages::GetText(Languages::TextRoute) : name));
 	route->SetDelay(delay);
 	route->AssignRelationsAtLock(relationsAtLock);
 	route->AssignRelationsAtUnlock(relationsAtUnlock);
+	route->AssignRelationsConditions(conditions);
 	route->SetVisible(visible);
 	route->SetPosX(posX);
 	route->SetPosY(posY);
 	route->SetPosZ(posZ);
+	route->SetRotation(DataModel::LayoutItem::Rotation0);
 	route->SetAutomode(automode);
 	if (automode == AutomodeYes)
 	{
@@ -2658,7 +2769,7 @@ bool Manager::RouteSave(RouteID routeID,
 		route->SetFollowUpRoute(RouteNone);
 	}
 
-	//Add new route
+	// Add new route
 	Track* newTrack = GetTrack(route->GetFromTrack());
 	if (newTrack)
 	{
@@ -2813,15 +2924,43 @@ const map<string,LayerID> Manager::LayerListByName() const
 
 const map<string,LayerID> Manager::LayerListByNameWithFeedback() const
 {
+	std::set<ObjectID> controlDeviceBusIDs;
+	{
+		std::lock_guard<std::mutex> guard(controlMutex);
+		for (auto& feedback : feedbacks)
+		{
+			Feedback* f = feedback.second;
+			controlDeviceBusIDs.insert((((f->GetControlID() << 8) + f->GetDevice()) << 2) + f->GetBus());
+		}
+	}
 	map<string,LayerID> list = LayerListByName();
 	std::lock_guard<std::mutex> guard(controlMutex);
-	for (auto& control : controls)
+	for (auto& c : controls)
 	{
-		if (!control.second->CanHandle(Hardware::CapabilityFeedback))
+		const ControlInterface* control = c.second;
+		if (!control->CanHandle(Hardware::CapabilityFeedback))
 		{
 			continue;
 		}
-		list["| Feedbacks of " + control.second->GetShortName()] = -control.first;
+		const ControlID controlID = c.first;
+		if (control->CanHandle(Hardware::CapabilityFeedbackDeviceBus))
+		{
+			for (const ObjectID controlDeviceBusID : controlDeviceBusIDs)
+			{
+				if ((controlDeviceBusID >> 10) == controlID)
+				{
+					const FeedbackDevice device = (controlDeviceBusID >> 2) & 0x000000FF;
+					const FeedbackBus bus = (controlDeviceBusID) & 0x00000003;
+					const string name = Logger::Logger::Format(Languages::GetText(Languages::TextFeedbacksOfControlDeviceBus), control->GetShortName(), device, bus);
+					list[name] = -controlDeviceBusID;
+				}
+			}
+		}
+		else
+		{
+			const string name = Logger::Logger::Format(Languages::GetText(Languages::TextFeedbacksOfControl), control->GetShortName());
+			list[name] = -(controlID << 10);
+		}
 	}
 	return list;
 }
@@ -2844,7 +2983,7 @@ bool Manager::LayerSave(LayerID layerID, const std::string&name, std::string& re
 	layerID = layer->GetID();
 
 	// update existing layer
-	layer->SetName(CheckObjectName(layers, layerMutex, layerID, name.size() == 0 ? "L" : name));
+	layer->SetName(CheckObjectName(layers, layerMutex, layerID, name.size() == 0 ? Languages::GetText(Languages::TextLayer) : name));
 
 	// save in db
 	if (storage)
@@ -2920,6 +3059,14 @@ bool Manager::LayerHasElements(const Layer* layer,
 			return true;
 		}
 	}
+	for (auto& counter : counters)
+	{
+		if (counter.second->IsVisibleOnLayer(layerId))
+		{
+			result = Logger::Logger::Format(Languages::GetText(Languages::TextLayerIsUsedByCounter), layer->GetName(), counter.second->GetName());
+			return true;
+		}
+	}
 	return false;
 }
 
@@ -2986,6 +3133,7 @@ bool Manager::SignalState(const ControlType controlType, const SignalID signalID
 {
 	if (boosterState == BoosterStateStop)
 	{
+		Warning(Languages::TextBoosterIsTurnedOff);
 		return false;
 	}
 	Signal* signal = GetSignal(signalID);
@@ -3107,7 +3255,7 @@ bool Manager::SignalSave(SignalID signalID,
 	// if we have a new object we have to update locoID
 	signalID = signal->GetID();
 
-	signal->SetName(CheckObjectName(signals, signalMutex, signalID, name.size() == 0 ? "S" : name));
+	signal->SetName(CheckObjectName(signals, signalMutex, signalID, name.size() == 0 ? Languages::GetText(Languages::TextSignal) : name));
 	signal->SetPosX(posX);
 	signal->SetPosY(posY);
 	signal->SetPosZ(posZ);
@@ -3359,7 +3507,7 @@ bool Manager::ClusterSave(ClusterID clusterID,
 	}
 
 	// update existing cluster
-	cluster->SetName(CheckObjectName(clusters, clusterMutex, clusterID, name.size() == 0 ? "C" : name));
+	cluster->SetName(CheckObjectName(clusters, clusterMutex, clusterID, name.size() == 0 ? Languages::GetText(Languages::TextCluster) : name));
 	cluster->AssignTracks(newTracks);
 
 	// save in db
@@ -3462,7 +3610,7 @@ bool Manager::TextSave(TextID textID,
 	textID = text->GetID();
 
 	// update existing text
-	text->SetName(CheckObjectName(texts, textMutex, textID, name.size() == 0 ? "T" : name));
+	text->SetName(CheckObjectName(texts, textMutex, textID, name.size() == 0 ? Languages::GetText(Languages::TextText) : name));
 	text->SetPosX(posX);
 	text->SetPosY(posY);
 	text->SetPosZ(posZ);
@@ -3570,6 +3718,200 @@ bool Manager::TextDelete(const TextID textID, string& result)
 		control.second->TextDelete(textID, textName);
 	}
 	delete text;
+	return true;
+}
+
+/***************************
+* Counter                  *
+***************************/
+
+DataModel::Counter* Manager::GetCounter(const CounterID counterID) const
+{
+	std::lock_guard<std::mutex> guard(counterMutex);
+	if (counters.count(counterID) != 1)
+	{
+		return nullptr;
+	}
+	return counters.at(counterID);
+}
+
+const map<string,DataModel::Counter*> Manager::CounterListByName() const
+{
+	map<string,DataModel::Counter*> out;
+	std::lock_guard<std::mutex> guard(counterMutex);
+	for (auto& counter : counters)
+	{
+		out[counter.second->GetName()] = counter.second;
+	}
+	return out;
+}
+
+bool Manager::CounterSave(CounterID counterID,
+	const string& name,
+	const int max,
+	const int min,
+	const LayoutPosition posX,
+	const LayoutPosition posY,
+	const LayoutPosition posZ,
+	const LayoutRotation rotation,
+	string& result)
+{
+	Counter* counter = GetCounter(counterID);
+	if (!CheckLayoutItemPosition(counter, posX, posY, posZ, LayoutItem::Width1, LayoutItem::Height1, rotation, result))
+	{
+		return false;
+	}
+
+	if (!counter)
+	{
+		counter = CreateAndAddObject(counters, counterMutex);
+	}
+
+	if (!counter)
+	{
+		result = Languages::GetText(Languages::TextUnableToAddCounter);
+		return false;
+	}
+
+	// if we have a new object we have to update counterID
+	counterID = counter->GetID();
+
+	// update existing counter
+	counter->SetName(CheckObjectName(counters, counterMutex, counterID, name.size() == 0 ? Languages::GetText(Languages::TextCounter) : name));
+	counter->SetMax(max);
+	counter->SetMin(min);
+	counter->SetPosX(posX);
+	counter->SetPosY(posY);
+	counter->SetPosZ(posZ);
+	counter->SetWidth(LayoutItem::Width1);
+	counter->SetHeight(LayoutItem::Height1);
+	counter->SetRotation(rotation);
+
+	CounterSaveAndPublishSettings(counter);
+	return true;
+}
+
+bool Manager::CounterPosition(CounterID counterID,
+	const LayoutPosition posX,
+	const LayoutPosition posY,
+	string& result)
+{
+	Counter* counter = GetCounter(counterID);
+	if (!counter)
+	{
+		result = Languages::GetText(Languages::TextCounterDoesNotExist);
+		return false;
+	}
+
+	if (!CheckLayoutItemPosition(counter, posX, posY, counter->GetPosZ(), LayoutItem::Width1, LayoutItem::Height1, counter->GetRotation(), result))
+	{
+		return false;
+	}
+
+	counter->SetPosX(posX);
+	counter->SetPosY(posY);
+
+	CounterSaveAndPublishSettings(counter);
+	return true;
+}
+
+bool Manager::CounterRotate(CounterID counterID,
+	string& result)
+{
+	Counter* counter = GetCounter(counterID);
+	if (!counter)
+	{
+		result = Languages::GetText(Languages::TextCounterDoesNotExist);
+		return false;
+	}
+
+	LayoutRotation newRotation = counter->GetRotation();
+	++newRotation;
+	if (!CheckLayoutItemPosition(counter, counter->GetPosX(), counter->GetPosY(), counter->GetPosZ(), LayoutItem::Width1, LayoutItem::Height1, newRotation, result))
+	{
+		return false;
+	}
+
+	counter->SetRotation(newRotation);
+
+	CounterSaveAndPublishSettings(counter);
+	return true;
+}
+
+void Manager::CounterSaveAndPublishSettings(const Counter* const counter)
+{
+	// save in db
+	if (storage)
+	{
+		TransactionGuard guard(storage);
+		storage->Save(*counter);
+	}
+
+	std::lock_guard<std::mutex> guard(controlMutex);
+	for (auto& control : controls)
+	{
+		control.second->CounterSettings(counter->GetID(), counter->GetName());
+	}
+}
+
+void Manager::CounterPublishState(const DataModel::Counter* const counter)
+{
+	std::lock_guard<std::mutex> guard(controlMutex);
+	for (auto& control : controls)
+	{
+		control.second->CounterState(counter);
+	}
+}
+
+bool Manager::CounterDelete(const CounterID counterID, string& result)
+{
+	if (counterID == CounterNone)
+	{
+		result = Languages::GetText(Languages::TextCounterDoesNotExist);
+		return false;
+	}
+	Counter* counter = nullptr;
+	{
+		std::lock_guard<std::mutex> guard(counterMutex);
+		if (counters.count(counterID) != 1)
+		{
+			result = Languages::GetText(Languages::TextCounterDoesNotExist);
+			return false;
+		}
+
+		counter = counters.at(counterID);
+		counters.erase(counterID);
+	}
+
+	if (storage)
+	{
+		TransactionGuard guard(storage);
+		storage->DeleteCounter(counterID);
+	}
+
+	const string& counterName = counter->GetName();
+	std::lock_guard<std::mutex> guard(controlMutex);
+	for (auto& control : controls)
+	{
+		control.second->CounterDelete(counterID, counterName);
+	}
+	delete counter;
+	return true;
+}
+
+bool Manager::Count(const CounterID counterID, const CounterType type)
+{
+	Counter* counter = GetCounter(counterID);
+	if (!counter)
+	{
+		return false;
+	}
+	const bool result = counter->Count(type);
+	if (!result)
+	{
+		return false;
+	}
+	CounterPublishState(counter);
 	return true;
 }
 
@@ -3722,16 +4064,23 @@ void Manager::TrackSetLocoOrientation(const TrackID trackID, const Orientation o
 	{
 		return;
 	}
-	track->SetLocoOrientation(orientation);
+	track->SetLocoBaseOrientation(orientation);
 	TrackPublishState(track);
 }
 
 void Manager::TrackPublishState(const DataModel::Track* track)
 {
-	std::lock_guard<std::mutex> guard(controlMutex);
-	for (auto& control : controls)
 	{
-		control.second->TrackState(track);
+		std::lock_guard<std::mutex> guard(controlMutex);
+		for (auto& control : controls)
+		{
+			control.second->TrackState(track);
+		}
+	}
+	vector<Track*> extensions = track->GetExtensions();
+	for (Track* extension : extensions)
+	{
+		TrackPublishState(extension);
 	}
 }
 
@@ -4626,6 +4975,24 @@ void Manager::DebounceWorker()
 	logger->Info(Languages::TextDebounceThreadTerminated);
 }
 
+void Manager::ControlCheckerWorker()
+{
+	Utils::Utils::SetThreadName(Languages::GetText(Languages::TextControlChecker));
+	logger->Info(Languages::TextControlCheckerThreadStarted);
+	while (controlCheckerRun)
+	{
+		{
+			std::lock_guard<std::mutex> guard(controlMutex);
+			for (auto& control : controls)
+			{
+				control.second->CheckHealth();
+			}
+		}
+		Utils::Utils::SleepForSeconds(2);
+	}
+	logger->Info(Languages::TextControlCheckerThreadTerminated);
+}
+
 template<class ID, class T>
 T* Manager::CreateAndAddObject(std::map<ID,T*>& objects, std::mutex& mutex)
 {
@@ -4793,6 +5160,9 @@ bool Manager::LayoutItemRotate(const DataModel::ObjectIdentifier& identifier,
 		case ObjectTypeTrack:
 			return TrackRotate(id, result);
 
+		case ObjectTypeCounter:
+			return CounterRotate(id, result);
+
 		case ObjectTypeRoute:
 		default:
 			return false;
@@ -4828,6 +5198,9 @@ bool Manager::LayoutItemNewPosition(const DataModel::ObjectIdentifier& identifie
 
 		case ObjectTypeTrack:
 			return TrackPosition(id, posX, posY, result);
+
+		case ObjectTypeCounter:
+			return CounterPosition(id, posX, posY, result);
 
 		default:
 			return false;

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -20,6 +20,7 @@ along with RailControl; see the file LICENCE. If not see
 
 #pragma once
 
+#include <cstdint>
 #include <ctime>
 #include <map>
 #include <string>
@@ -29,11 +30,23 @@ along with RailControl; see the file LICENCE. If not see
 
 namespace DataModel
 {
-	enum AccessoryType : unsigned char
+	enum AccessoryType : uint8_t
 	{
-		AccessoryTypeDefault = 0,
-		AccessoryTypeStraight = 1,
-		AccessoryTypeTurn = 2,
+		// 2 MSB are functional type (on-on, on push, on-off)
+		AccessoryTypeOnOn            = 0x00,
+		AccessoryTypeOnPush          = 0x40,
+		AccessoryTypeOnOff           = 0x80,
+		AccessoryTypeConnectionMask  = 0xC0,
+
+		// 6 LSB are display type (default, straight, turn, ...)
+		AccessoryTypeDefault         = 0x00,
+		AccessoryTypeStraight        = 0x01,
+		AccessoryTypeTurn            = 0x02,
+		AccessoryTypeDecoupler       = 0x03,
+		AccessoryTypeLight           = 0x04,
+		AccessoryTypeLightInhouse    = 0x05,
+		AccessoryTypeLightStreet     = 0x06,
+		AccessoryTypeMask            = 0x3F,
 
 		SignalTypeSimpleLeft  =  0,
 		SignalTypeSimpleRight =  1,
@@ -48,16 +61,16 @@ namespace DataModel
 		SignalTypeDeHVDistant = 22,
 		SignalTypeDeBlock     = 23,
 
-		SwitchTypeLeft = 0,
-		SwitchTypeRight = 1,
-		SwitchTypeThreeWay = 2,
-		SwitchTypeMaerklinLeft = 3,
+		SwitchTypeLeft          = 0,
+		SwitchTypeRight         = 1,
+		SwitchTypeThreeWay      = 2,
+		SwitchTypeMaerklinLeft  = 3,
 		SwitchTypeMaerklinRight = 4
 	};
 
-	enum AccessoryState : unsigned char
+	enum AccessoryState : uint8_t
 	{
-		DefaultState = 0,
+		DefaultState                = 0,
 
 		AccessoryStateOff           = 0,
 		AccessoryStateOn            = 1,
@@ -102,7 +115,7 @@ namespace DataModel
 	class AccessoryBase : public HardwareHandle
 	{
 		public:
-			AccessoryBase()
+			inline AccessoryBase()
 			:	HardwareHandle(),
 				accessoryType(AccessoryTypeDefault),
 				accessoryState(AccessoryStateOff),
@@ -143,6 +156,11 @@ namespace DataModel
 				this->accessoryState = state;
 				lastUsed = std::time(nullptr);
 				++counter;
+			}
+
+			inline bool CheckState(const AccessoryState state) const
+			{
+				return (accessoryState == state);
 			}
 
 			inline AccessoryPulseDuration GetAccessoryPulseDuration() const
@@ -188,7 +206,7 @@ namespace DataModel
 
 		protected:
 			virtual std::string Serialize() const;
-			virtual bool Deserialize(const std::map<std::string,std::string>& arguments);
+			virtual void Deserialize(const std::map<std::string,std::string>& arguments);
 
 		private:
 			AccessoryType accessoryType;

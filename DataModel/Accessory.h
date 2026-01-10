@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -43,7 +43,8 @@ namespace DataModel
 			inline Accessory(const AccessoryID accessoryID)
 			:	AccessoryBase(),
 				LayoutItem(accessoryID),
-				LockableItem()
+				LockableItem(),
+				port(AddressPortRed)
 			{
 			}
 
@@ -62,22 +63,35 @@ namespace DataModel
 			{
 			}
 
-			virtual ObjectType GetObjectType() const override
+			inline ObjectType GetObjectType() const override
 			{
 				return ObjectTypeAccessory;
 			}
 
-			virtual std::string GetLayoutType() const override
+			inline std::string GetLayoutType() const override
 			{
 				return Languages::GetText(Languages::TextAccessory);
 			}
 
-			virtual std::string Serialize() const override;
+			std::string Serialize() const override;
 
 			using HardwareHandle::Deserialize;
-			virtual bool Deserialize(const std::string& serialized) override;
+			void Deserialize(const std::string& serialized) override;
 
 			Accessory& operator=(const Hardware::AccessoryCacheEntry& accessory);
+
+			inline void SetPort(AddressPort port)
+			{
+				this->port = port;
+			}
+
+			inline AddressPort GetPort() const
+			{
+				return port;
+			}
+
+		private:
+			AddressPort port;
 	};
 } // namespace DataModel
 

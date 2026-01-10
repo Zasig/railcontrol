@@ -231,6 +231,10 @@ function parseObjectIdentifier(identifier)
 			type = "text";
 			break;
 
+		case "c":
+			type = "counter";
+			break;
+
 		default:
 			type = "object";
 			break;
@@ -509,6 +513,29 @@ function updateName()
 	return true;
 }
 
+function update_pin()
+{
+	let pinField = document.getElementById('pin');
+	if (!pinField)
+	{
+		return false;
+	}
+	let pin = pinField.value;
+	let calc_moduleField = document.getElementById('calc_module');
+	if (!calc_moduleField)
+	{
+		return false;
+	}
+	calc_moduleField.innerHTML = ((pin - 1) >> 4) + 1;
+	let calc_pinField = document.getElementById('calc_pin');
+	if (!calc_pinField)
+	{
+		return false;
+	}
+	calc_pinField.innerHTML = ((pin - 1) & 0x0F) + 1;
+	return false;
+}
+
 function getArgumentsOfHardwareType()
 {
 	var hardwareType = document.getElementById('s_hardwaretype');
@@ -760,6 +787,45 @@ function onClickAccessory(accessoryID)
 	return false;
 }
 
+function onPointerDownAccessory(accessoryID)
+{
+	var identifier = 'a_' + accessoryID;
+	if (modifierKeyPressed(event))
+	{
+		return;
+	}
+	if (event.button != 0)
+	{
+		return;
+	}
+	var element = document.getElementById(identifier);
+	var url = '/?cmd=accessorystate';
+	url += '&state=on';
+	url += '&accessory=' + accessoryID;
+	fireRequestAndForget(url);
+	return false;
+}
+
+function onPointerUpAccessory(accessoryID)
+{
+	var identifier = 'a_' + accessoryID;
+	if (modifierKeyPressed(event))
+	{
+		rotateObject(identifier);
+		return;
+	}
+	if (event.button != 0)
+	{
+		return;
+	}
+	var element = document.getElementById(identifier);
+	var url = '/?cmd=accessorystate';
+	url += '&state=off';
+	url += '&accessory=' + accessoryID;
+	fireRequestAndForget(url);
+	return false;
+}
+
 function onClickRoute(routeID)
 {
 	var element = document.getElementById('r_' + routeID);
@@ -821,6 +887,17 @@ function onClickSignal(signalID)
 	url += '&state=' + (element.classList.contains('signal_clear') ? 'stop' : 'clear');
 	url += '&signal=' + signalID;
 	fireRequestAndForget(url);
+	return false;
+}
+
+function onClickCounter(counterID)
+{
+	var identifier = 'c_' + counterID;
+	if (modifierKeyPressed(event))
+	{
+		rotateObject(identifier);
+		return;
+	}
 	return false;
 }
 
@@ -909,27 +986,101 @@ function onChangeCheckboxShowHide(checkboxId, divId, tabId)
 	}
 }
 
-function onChangeTrackType()
+function onChangeTrackTypeMainTrack()
 {
-	var trackType = document.getElementById('s_tracktype');
+	let feedbacks = document.getElementById('tab_button_feedbacks');
+	if (!feedbacks)
+	{
+		return;
+	}
+	let signals = document.getElementById('tab_button_signals');
+	if (!signals)
+	{
+		return;
+	}
+	let automode = document.getElementById('tab_button_automode');
+	if (!automode)
+	{
+		return;
+	}
+	let trackType = document.getElementById('s_tracktype');
 	if (!trackType)
 	{
 		return;
 	}
-	var trackTypeValue = trackType.value;
-	var showname = document.getElementById('i_showname');
+	let main = document.getElementById('s_main');
+	if (!main)
+	{
+		return;
+	}
+	let name = document.getElementById('i_name');
+	if (!name)
+	{
+		return;
+	}
+	let showname = document.getElementById('i_showname');
 	if (!showname)
 	{
 		return;
 	}
-	showname.hidden = (trackTypeValue != 0)
-	var length = document.getElementById('i_length');
+	let shownamecb = document.getElementById('showname');
+	if (!shownamecb)
+	{
+		return;
+	}
+	let displayname = document.getElementById('i_displayname');
+	if (!displayname)
+	{
+		return;
+	}
+	let length = document.getElementById('i_length');
 	if (!length)
 	{
 		return;
 	}
-	var trackTypeValue = trackType.value;
-	length.hidden = (trackTypeValue == 1 || trackTypeValue == 5 || trackTypeValue == 7 || trackTypeValue == 8 || trackTypeValue == 9)
+
+	if (main.value != 0)
+	{
+		feedbacks.classList.add('hidden');
+		signals.classList.add('hidden');
+		automode.classList.add('hidden');
+		name.classList.add('hidden');
+	}
+	else
+	{
+		feedbacks.classList.remove('hidden');
+		signals.classList.remove('hidden');
+		automode.classList.remove('hidden');
+		name.classList.remove('hidden');
+	}
+
+	let trackTypeValue = trackType.value;
+	if ((trackTypeValue != 0) && (main.value != 0))
+	{
+		showname.classList.add('hidden');
+	}
+	else
+	{
+		showname.classList.remove('hidden');
+	}
+
+	if ((main.value != 0) || (trackTypeValue != 0) || (shownamecb.checked == false))
+	{
+		displayname.classList.add('hidden');
+	}
+	else
+	{
+		displayname.classList.remove('hidden');
+	}
+
+	if (trackTypeValue == 1 || trackTypeValue == 5 || trackTypeValue == 7 || trackTypeValue == 8 || trackTypeValue == 9)
+	{
+		length.classList.add('hidden');
+	}
+	else
+	{
+		length.classList.remove('hidden');
+	}
 }
 
 function updateLayoutItem(elementName, data)
@@ -1374,6 +1525,36 @@ function updateSignal(signalID)
 	requestUpdateLayoutItem(elementName, url);
 }
 
+function updateCounterState(argumentMap)
+{
+	if (!argumentMap.has('counter') || !argumentMap.has('count'))
+	{
+		return;
+	}
+	var elementName = 'c_' + argumentMap.get('counter');
+	var element = document.getElementById(elementName);
+	if (!element)
+	{
+		return;
+	}
+	var count = argumentMap.get('count');
+	elementName += '_text';
+	element = document.getElementById(elementName);
+	if (!element)
+	{
+		return;
+	}
+	element.innerHTML = count;
+}
+
+function updateCounter(counterID)
+{
+	elementName = 'c_' + counterID;
+	var url = '/?cmd=counterget';
+	url += '&counter=' + counterID;
+	requestUpdateLayoutItem(elementName, url);
+}
+
 function dataUpdate(event)
 {
 	var status = document.getElementById('status');
@@ -1519,6 +1700,20 @@ function dataUpdate(event)
 		deleteElement(elementName);
 		deleteElement(elementName + '_context');
 	}
+	else if (command == 'countersettings')
+	{
+		updateCounter(argumentMap.get('counter'));
+	}
+	else if (command == 'counterdelete')
+	{
+		elementName = 'c_' + argumentMap.get('counter');
+		deleteElement(elementName);
+		deleteElement(elementName + '_context');
+	}
+	else if (command == 'counterstate')
+	{
+		updateCounterState(argumentMap);
+	}
 	else if (command == 'trackstate')
 	{
 		updateTrackState(argumentMap);
@@ -1562,12 +1757,14 @@ function dataUpdate(event)
 		url += '&feedback=' + feedbackID;
 		url += '&layer=' + layerID;
 		requestUpdateLayoutItem(elementName, url);
+		loadLayerSelector();
 	}
 	else if (command == 'feedbackdelete')
 	{
 		elementName = 'f_' + argumentMap.get('feedback');
 		deleteElement(elementName);
 		deleteElement(elementName + '_context');
+		loadLayerSelector();
 	}
 	else if ((command == 'locosettings')
 		|| (command == 'locodelete')
@@ -1681,15 +1878,85 @@ function loadProtocol(type, ID)
 		return;
 	}
 	var controlID = selectControl.value;
-	var selectProtocol = document.getElementById('select_protocol');
+	var elementName = 'select_protocol';
+	var selectProtocol = document.getElementById(elementName);
 	if (!selectProtocol)
 	{
 		return;
 	}
-	var elementName = 'select_protocol';
 	var url = '/?cmd=protocol';
 	url += '&control=' + controlID;
 	url += '&' + type + '=' + ID;
+	requestUpdateItem(elementName, url);
+}
+
+function loadAccessoryAddress()
+{
+	var selectAccessoryType = document.getElementById('s_connectiontype');
+	if (!selectAccessoryType)
+	{
+		return;
+	}
+	var type = selectAccessoryType.value;
+	var elementName = 'select_address';
+	var selectAddress = document.getElementById(elementName);
+	if (!selectAddress)
+	{
+		return;
+	}
+	var intAddress = document.getElementById('address');
+	if (!intAddress)
+	{
+		return;
+	}
+	var address = intAddress.value;
+	var selectPort = document.getElementById('s_port');
+	if (!selectPort)
+	{
+		selectPort = document.getElementById('port');
+		if (!selectPort)
+		{
+			return;
+		}
+	}
+	var port = selectPort.value;
+	var url = '/?cmd=accessoryaddress';
+	url += '&type=' + type;
+	url += '&address=' + address;
+	url += '&port=' + port;
+	requestUpdateItem(elementName, url);
+}
+
+function loadDeviceBus()
+{
+	var selectControl = document.getElementById('s_control');
+	if (!selectControl)
+	{
+		return;
+	}
+	var controlID = selectControl.value;
+	var elementName = 'select_device_bus';
+	var selectDeviceBus = document.getElementById(elementName);
+	if (!selectDeviceBus)
+	{
+		return;
+	}
+	var intDevice = document.getElementById('device');
+	if (!intDevice)
+	{
+		return;
+	}
+	var device = intDevice.value;
+	var intBus = document.getElementById('bus');
+	if (!intBus)
+	{
+		return;
+	}
+	var bus = intBus.value;
+	var url = '/?cmd=devicebus';
+	url += '&control=' + controlID;
+	url += '&device=' + device;
+	url += '&bus=' + bus;
 	requestUpdateItem(elementName, url);
 }
 
@@ -2324,3 +2591,4 @@ updater.addEventListener('message', dataUpdate);
 updater.addEventListener('error', dataUpdateError);
 
 window.addEventListener('resize', updateLocoControls);
+

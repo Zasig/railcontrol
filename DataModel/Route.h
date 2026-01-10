@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -87,6 +87,7 @@ namespace DataModel
 				lastUsed(0),
 				counter(0)
 			{
+				SetRotation(LayoutItem::Rotation0);
 			}
 
 			Route(Manager* manager, const std::string& serialized);
@@ -95,6 +96,7 @@ namespace DataModel
 			{
 				DeleteRelations(relationsAtLock);
 				DeleteRelations(relationsAtUnlock);
+				DeleteRelations(relationsConditions);
 			}
 
 			inline ObjectType GetObjectType() const override
@@ -103,7 +105,7 @@ namespace DataModel
 			}
 
 			std::string Serialize() const override;
-			bool Deserialize(const std::string& serialized) override;
+			void Deserialize(const std::string& serialized) override;
 
 			inline std::string GetLayoutType() const override
 			{
@@ -130,6 +132,11 @@ namespace DataModel
 				return AssignRelations(relationsAtUnlock, newRelations);
 			}
 
+			inline bool AssignRelationsConditions(const std::vector<DataModel::Relation*>& newConditions)
+			{
+				return AssignRelations(relationsConditions, newConditions);
+			}
+
 			inline const std::vector<DataModel::Relation*>& GetRelationsAtLock() const
 			{
 				return relationsAtLock;
@@ -138,6 +145,11 @@ namespace DataModel
 			inline const std::vector<DataModel::Relation*>& GetRelationsAtUnlock() const
 			{
 				return relationsAtUnlock;
+			}
+
+			inline const std::vector<DataModel::Relation*>& GetRelationsConditions() const
+			{
+				return relationsConditions;
 			}
 
 			bool FromTrackOrientation(Logger::Logger* logger,
@@ -156,6 +168,8 @@ namespace DataModel
 			bool Reserve(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override;
 
 			bool Lock(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override;
+
+			bool CheckConditions(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier);
 
 			bool Release(Logger::Logger* logger, const ObjectIdentifier& locoBaseIdentifier) override
 			{
@@ -402,6 +416,7 @@ namespace DataModel
 			Delay delay;
 			std::vector<DataModel::Relation*> relationsAtLock;
 			std::vector<DataModel::Relation*> relationsAtUnlock;
+			std::vector<DataModel::Relation*> relationsConditions;
 			PushpullType pushpull;
 			Propulsion propulsion;
 			TrainType trainType;

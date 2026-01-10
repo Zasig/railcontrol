@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -48,6 +48,8 @@ class Manager
 
 		Manager(Config& config);
 		~Manager();
+
+		void Warning(Languages::TextSelector textSelector);
 
 		// booster
 		inline BoosterState Booster() const
@@ -331,6 +333,7 @@ class Manager
 			const std::string& matchKey,
 			const Protocol protocol,
 			const Address address,
+			const AddressPort port,
 			const Address serverAddress,
 			const DataModel::AccessoryType type,
 			const DataModel::AccessoryPulseDuration duration,
@@ -349,7 +352,19 @@ class Manager
 		void AccessoryRemoveMatchKey(const AccessoryID accessoryId);
 
 		// feedback
-		void FeedbackState(const ControlID controlID, const FeedbackPin pin, const DataModel::Feedback::FeedbackState state);
+		inline void FeedbackState(const ControlID controlID,
+			const FeedbackPin pin,
+			const DataModel::Feedback::FeedbackState state)
+		{
+			FeedbackState(controlID, pin, 0, 0, state);
+		}
+
+		void FeedbackState(const ControlID controlID,
+			const FeedbackPin pin,
+			const FeedbackDevice device,
+			const FeedbackBus bus,
+			const DataModel::Feedback::FeedbackState state);
+
 		void FeedbackState(const FeedbackID feedbackID, const DataModel::Feedback::FeedbackState state);
 		void FeedbackPublishState(const DataModel::Feedback* feedback);
 		DataModel::Feedback* GetFeedback(const FeedbackID feedbackID) const;
@@ -377,6 +392,8 @@ class Manager
 			const ControlID controlID,
 			const std::string& matchKey,
 			const FeedbackPin pin,
+			const FeedbackDevice device,
+			const FeedbackBus bus,
 			const bool inverted,
 			const DataModel::FeedbackType feedbackType,
 			const RouteID routeId,
@@ -411,7 +428,10 @@ class Manager
 		}
 
 		const std::map<std::string,DataModel::Track*> TrackListByName() const;
-		const std::map<std::string,TrackID> TrackListIdByName() const;
+
+		const std::map<std::string,DataModel::Track*> TrackListMasterByName() const;
+
+		const std::map<std::string,TrackID> TrackListIdByName(const TrackID excludeTrackID = TrackNone) const;
 
 		inline void TrackSave(const DataModel::Track* track) const
 		{
@@ -433,6 +453,7 @@ class Manager
 			const DataModel::LayoutItem::LayoutItemSize width,
 			const DataModel::LayoutItem::LayoutRotation rotation,
 			const DataModel::TrackType trackType,
+			const TrackID main,
 			const std::vector<DataModel::Relation*>& newFeedbacks,
 			const std::vector<DataModel::Relation*>& newSignals,
 			const DataModel::SelectRouteApproach selectRouteApproach,
@@ -517,6 +538,7 @@ class Manager
 			const Length maxTrainLength,
 			const std::vector<DataModel::Relation*>& relationsAtLock,
 			const std::vector<DataModel::Relation*>& relationsAtUnlock,
+			const std::vector<DataModel::Relation*>& condition,
 			const DataModel::LayoutItem::Visible visible,
 			const DataModel::LayoutItem::LayoutPosition posX,
 			const DataModel::LayoutItem::LayoutPosition posY,
@@ -630,6 +652,31 @@ class Manager
 			std::string& result);
 
 		bool TextDelete(const TextID textID,
+			std::string& result);
+
+		// counter
+		DataModel::Counter* GetCounter(const CounterID counterID) const;
+
+		bool Count(const CounterID counterID, const DataModel::CounterType type);
+
+		inline const std::map<TextID,DataModel::Counter*>& CounterList() const
+		{
+			return counters;
+		}
+
+		const std::map<std::string,DataModel::Counter*> CounterListByName() const;
+
+		bool CounterSave(CounterID counterID,
+			const std::string& name,
+			const int max,
+			const int min,
+			const DataModel::LayoutItem::LayoutPosition x,
+			const DataModel::LayoutItem::LayoutPosition y,
+			const DataModel::LayoutItem::LayoutPosition z,
+			const DataModel::LayoutItem::LayoutRotation rotation,
+			std::string& result);
+
+		bool CounterDelete(const CounterID counterID,
 			std::string& result);
 
 		// automode
@@ -757,19 +804,28 @@ class Manager
 		bool ControlIsOfHardwareType(const ControlID controlID, const HardwareType hardwareType);
 
 		ControlInterface* GetControl(const ControlID controlID) const;
-		DataModel::Loco* GetLoco(const ControlID controlID, const Protocol protocol, const Address address) const;
-		DataModel::Accessory* GetAccessory(const ControlID controlID, const Protocol protocol, const Address address) const;
+
+		DataModel::Loco* GetLoco(const ControlID controlID,
+			const Protocol protocol,
+			const Address address) const;
+
+		DataModel::Accessory* GetAccessory(const ControlID controlID,
+			const Protocol protocol,
+			const Address address,
+			const AddressPort port) const;
+
 		DataModel::Switch* GetSwitch(const ControlID controlID, const Protocol protocol, const Address address) const;
-		DataModel::Feedback* GetFeedback(const ControlID controlID, const FeedbackPin pin) const;
+
+		DataModel::Feedback* GetFeedback(const ControlID controlID,
+			const FeedbackPin pin,
+			const FeedbackDevice device,
+			const FeedbackBus bus) const;
+
 		DataModel::Signal* GetSignal(const ControlID controlID, const Protocol protocol, const Address address) const;
 
 		void AccessoryState(const ControlType controlType, DataModel::Accessory* accessory, const DataModel::AccessoryState state, const bool force);
-		void SwitchState(const ControlType controlType, DataModel::Switch* mySwitch, const DataModel::AccessoryState state, const bool force);
 
-		static inline void FeedbackState(DataModel::Feedback* feedback, const DataModel::Feedback::FeedbackState state)
-		{
-			feedback->SetState(state);
-		}
+		void SwitchState(const ControlType controlType, DataModel::Switch* mySwitch, const DataModel::AccessoryState state, const bool force);
 
 		bool AccessoryPosition(const AccessoryID accessoryID,
 			const DataModel::LayoutItem::LayoutPosition posX,
@@ -806,6 +862,11 @@ class Manager
 			const DataModel::LayoutItem::LayoutPosition posY,
 			std::string& result);
 
+		bool CounterPosition(const CounterID counterID,
+			const DataModel::LayoutItem::LayoutPosition posX,
+			const DataModel::LayoutItem::LayoutPosition posY,
+			std::string& result);
+
 		bool AccessoryRotate(const AccessoryID accessoryID,
 			std::string& result);
 
@@ -824,6 +885,9 @@ class Manager
 		bool TrackRotate(const TrackID trackID,
 			std::string& result);
 
+		bool CounterRotate(const CounterID counterID,
+			std::string& result);
+
 		void AccessorySaveAndPublishSettings(const DataModel::Accessory* const accessory);
 		void FeedbackSaveAndPublishSettings(const DataModel::Feedback* const feedback);
 		void RouteSaveAndPublishSettings(const DataModel::Route* const route);
@@ -831,6 +895,8 @@ class Manager
 		void SwitchSaveAndPublishSettings(const DataModel::Switch* const mySwitch);
 		void TextSaveAndPublishSettings(const DataModel::Text* const text);
 		void TrackSaveAndPublishSettings(const DataModel::Track* const track);
+		void CounterSaveAndPublishSettings(const DataModel::Counter* const counter);
+		void CounterPublishState(const DataModel::Counter* const counter);
 
 		// layout
 		bool CheckPositionFree(const DataModel::LayoutItem::LayoutPosition posX,
@@ -920,6 +986,8 @@ class Manager
 		}
 
 		void DebounceWorker();
+
+		void ControlCheckerWorker();
 
 		template<class ID, class T>
 		T* CreateAndAddObject(std::map<ID,T*>& objects, std::mutex& mutex);
@@ -1062,6 +1130,10 @@ class Manager
 		std::map<TextID,DataModel::Text*> texts;
 		mutable std::mutex textMutex;
 
+		// counter
+		std::map<CounterID,DataModel::Counter*> counters;
+		mutable std::mutex counterMutex;
+
 		// storage
 		Storage::StorageHandler* storage;
 
@@ -1076,6 +1148,8 @@ class Manager
 		volatile bool run;
 		volatile bool debounceRun;
 		std::thread debounceThread;
+		volatile bool controlCheckerRun;
+		std::thread controlCheckerThread;
 
 		volatile bool initLocosDone;
 

@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -28,6 +28,7 @@ along with RailControl; see the file LICENCE. If not see
 #include "DataModel/LayoutItem.h"
 #include "Hardware/FeedbackCache.h"
 #include "Languages.h"
+#include "Logger/Logger.h"
 
 class Manager;
 
@@ -56,6 +57,8 @@ namespace DataModel
 			:	LayoutItem(feedbackID),
 			 	controlID(ControlIdNone),
 			 	pin(FeedbackPinNone),
+				device(FeedbackDeviceNone),
+				bus(FeedbackBusNone),
 			 	manager(manager),
 			 	feedbackType(FeedbackTypeDefault),
 			 	routeId(RouteNone),
@@ -79,11 +82,11 @@ namespace DataModel
 
 			std::string Serialize() const override;
 
-			bool Deserialize(const std::string& serialized) override;
+			void Deserialize(const std::string& serialized) override;
 
 			inline bool IsInUse() const
 			{
-				return track != nullptr;
+				return (!track);
 			}
 
 			inline std::string GetLayoutType() const override
@@ -121,11 +124,17 @@ namespace DataModel
 				return inverted;
 			}
 
-			void SetState(const FeedbackState state);
+			void SetState(Logger::Logger* logger,
+				const FeedbackState state);
 
 			inline FeedbackState GetState() const
 			{
 				return static_cast<FeedbackState>(stateCounter > 0);
+			}
+
+			inline bool CheckState(const FeedbackState state) const
+			{
+				return (GetState() == state);
 			}
 
 			void Debounce();
@@ -148,6 +157,39 @@ namespace DataModel
 			inline FeedbackPin GetPin() const
 			{
 				return pin;
+			}
+
+			inline void SetDevice(const FeedbackDevice device)
+			{
+				this->device = device;
+			}
+
+			inline FeedbackDevice GetDevice() const
+			{
+				return device;
+			}
+
+			inline void SetBus(const FeedbackBus bus)
+			{
+				this->bus = bus;
+			}
+
+			inline FeedbackBus GetBus() const
+			{
+				return bus;
+			}
+
+			inline bool CheckControl(const LayerID layer) const
+			{
+				const ControlID controlID = (-layer) >> 10;
+				const FeedbackDevice device = ((-layer) >> 2) & 0x000000FF;
+				const FeedbackBus bus = (-layer) & 0x00000003;
+				return CheckControl(controlID, device, bus);
+			}
+
+			inline bool CheckControl(const ControlID controlID, const FeedbackDevice device, const FeedbackBus bus) const
+			{
+				return (GetControlID() == controlID) && (GetDevice() == device) && (GetBus() == bus);
 			}
 
 			inline void SetTrack(DataModel::Track* track = nullptr)
@@ -182,6 +224,8 @@ namespace DataModel
 
 			ControlID controlID;
 			FeedbackPin pin;
+			FeedbackDevice device;
+			FeedbackBus bus;
 
 			Manager* manager;
 			FeedbackType feedbackType;

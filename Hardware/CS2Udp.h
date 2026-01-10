@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -41,7 +41,7 @@ namespace Hardware
 			static void GetArgumentTypesAndHint(std::map<unsigned char,ArgumentType>& argumentTypes, std::string& hint)
 			{
 				argumentTypes[1] = ArgumentTypeIpAddress;
-				argumentTypes[2] = ArgumentTypeMasterSlave;
+				argumentTypes[2] = ArgumentTypeMainSecundary;
 				hint = Languages::GetText(Languages::TextHintCs2Udp);
 			}
 

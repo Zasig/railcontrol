@@ -1,7 +1,7 @@
 /*
 RailControl - Model Railway Control Software
 
-Copyright (c) 2017-2024 by Teddy / Dominik Mahrer - www.railcontrol.org
+Copyright (c) 2017-2025 by Teddy / Dominik Mahrer - www.railcontrol.org
 
 RailControl is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -19,7 +19,7 @@ along with RailControl; see the file LICENCE. If not see
 */
 
 #include "Manager.h"
-#include "MultipleUnit.h"
+#include "DataModel/MultipleUnit.h"
 
 #include <map>
 #include <string>
@@ -36,16 +36,16 @@ namespace DataModel
 		return str;
 	}
 
-	bool MultipleUnit::Deserialize(const std::string& serialized)
+	void MultipleUnit::Deserialize(const std::string& serialized)
 	{
 		map<string,string> arguments;
 		ParseArguments(serialized, arguments);
-		if (!arguments.count("objectType") || arguments.at("objectType").compare("MultipleUnit") != 0)
+		string objectType = Utils::Utils::GetStringMapEntry(arguments, "objectType");
+		if (objectType.compare("MultipleUnit") != 0)
 		{
-			return false;
+			return;
 		}
 		LocoBase::Deserialize(arguments);
-		return true;
 	}
 
 	void MultipleUnit::CalculatePropulsion()
