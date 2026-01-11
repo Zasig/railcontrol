@@ -595,6 +595,11 @@ namespace Server { namespace Web
 			{
 				manager.LocoBaseStopAll();
 			}
+			else if (arguments["cmd"].compare("savedatabase") == 0)
+			{
+				manager.SyncDatabase();
+				ReplyHtmlWithHeaderAndParagraph(Languages::GetText(Languages::TextDatabaseSaved));
+			}
 			else if (arguments["cmd"].compare("settingsedit") == 0)
 			{
 				HandleSettingsEdit();
@@ -3708,6 +3713,7 @@ namespace Server { namespace Web
 		HtmlTag menuMain("div");
 		menuMain.AddClass("menu_main");
 		menuMain.AddChildTag(HtmlTagButtonPopup("<svg width=\"36\" height=\"36\"><polygon points=\"16,1.5 31,1.5 31,25.5 16,25.5\" fill=\"white\" style=\"stroke:black;stroke-width:1;\"/><polygon points=\"21,11.5 31,1.5 31,25.5 21,35.5\" fill=\"black\" style=\"stroke:black;stroke-width:1;\"/><polygon points=\"1,11 8.5,11 8.5,6 16,13.5 8.5,21 8.5,16 1,16\"/></svg>", "askshutdown", Languages::TextExitRailControl));
+		menuMain.AddChildTag(HtmlTagButtonCommand("<svg width=\"36\" height=\"36\"><rect x=\"4\" y=\"6\" width=\"28\" height=\"24\" fill=\"white\" stroke=\"black\" stroke-width=\"2\"/><rect x=\"8\" y=\"10\" width=\"20\" height=\"4\" fill=\"black\"/><circle cx=\"18\" cy=\"22\" r=\"4\" fill=\"black\"/></svg>", "savedatabase", Languages::TextSaveDatabase));
 		menuMain.AddChildTag(HtmlTagButtonCommandToggle("<svg width=\"36\" height=\"36\"><polyline points=\"13.5,9.8 12.1,10.8 10.8,12.1 9.8,13.5 9.1,15.1 8.7,16.8 8.5,18.5 8.7,20.2 9.1,21.9 9.8,23.5 10.8,24.9 12.1,26.2 13.5,27.2 15.1,27.9 16.8,28.3 18.5,28.5 20.2,28.3 21.9,27.9 23.5,27.2 24.9,26.2 26.2,24.9 27.2,23.5 27.9,21.9 28.3,20.2 28.5,18.5 28.3,16.8 27.9,15.1 27.2,13.5 26.2,12.1 24.9,10.8 23.5,9.8\" stroke=\"black\" stroke-width=\"3\" fill=\"none\"/><polyline points=\"18.5,3.5 18.5,16\" stroke=\"black\" stroke-width=\"3\" fill=\"none\"/></svg>", "booster", manager.Booster(), Languages::TextTurningBoosterOnOrOff).AddClass("button_booster"));
 		menuMain.AddChildTag(HtmlTagButtonCommand("<svg width=\"36\" height=\"36\"><polyline points=\"2,12 2,11 11,2 26,2 35,11 35,26 26,35 11,35 2,26 2,12\" stroke=\"black\" stroke-width=\"1\" fill=\"red\"/><text x=\"4\" y=\"22\" fill=\"white\" font-size=\"11\">STOP</text></svg>", "stopallimmediately", Languages::TextStopAllLocos));
 		menuMain.AddChildTag(HtmlTagButtonCommand("<svg width=\"36\" height=\"36\"><polygon points=\"17,36 17,28 15,28 10,23 10,5 15,0 21,0 26,5 26,23 21,28 19,28 19,36\" fill=\"black\" /><circle cx=\"18\" cy=\"8\" r=\"4\" fill=\"red\" /><circle cx=\"18\" cy=\"20\" r=\"4\" fill=\"darkgray\" /></svg>", "stopall", Languages::TextSetAllLocosToManualMode));

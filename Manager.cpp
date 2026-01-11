@@ -34,6 +34,7 @@ along with RailControl; see the file LICENCE. If not see
 #include "Storage/TransactionGuard.h"
 #include "Utils/Integer.h"
 #include "Utils/Utils.h"
+#include "Server/Api/ApiServer.h"
 #include "Server/CS2/CS2Server.h"
 #include "Server/Web/WebServer.h"
 #include "Server/Z21/Z21Server.h"
@@ -103,6 +104,11 @@ Manager::Manager(Config& config)
 	nrOfTracksToReserve = static_cast<DataModel::Loco::NrOfTracksToReserve>(Utils::Integer::StringToInteger(storage->GetSetting("NrOfTracksToReserve"), 2));
 
 	controls[ControlIdWebServer] = new Server::Web::WebServer(*this, config.getStringValue("webserveraddress", "any"), config.getIntValue("webserverport", 8082));
+
+	if (config.getBoolValue("apiserver", false))
+	{
+		controls[ControlIdApiServer] = new Server::Api::ApiServer(*this, config.getStringValue("apiserveraddress", "any"), config.getIntValue("apiserverport", 8083));
+	}
 
 	if (config.getBoolValue("z21server", false))
 	{

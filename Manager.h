@@ -59,6 +59,12 @@ class Manager
 
 		void Booster(const ControlType controlType, const BoosterState status);
 
+		// database sync
+		inline void SyncDatabase()
+		{
+			storage->Sync();
+		}
+
 		// hardware (virt, CS2, ...)
 		bool ControlSave(ControlID controlID,
 			const HardwareType& hardwareType,

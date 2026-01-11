@@ -52,6 +52,7 @@ namespace Storage
 			std::string GetSetting(const std::string& key) override;
 			void StartTransaction() override;
 			void CommitTransaction() override;
+			void Sync();
 
 		private:
 			sqlite3 *db;

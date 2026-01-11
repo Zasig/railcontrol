@@ -160,6 +160,11 @@ namespace Storage
 				transactionMutex.unlock();
 			}
 
+			inline void Sync()
+			{
+				sqlite.Sync();
+			}
+
 		private:
 			void SaveRelations(const std::vector<DataModel::Relation*> relations);
 			std::vector<DataModel::Relation*> RelationsFrom(const DataModel::Relation::RelationType type, const ObjectID objectID);

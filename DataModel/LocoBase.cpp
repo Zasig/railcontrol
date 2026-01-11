@@ -1000,7 +1000,12 @@ namespace DataModel
 		trackSecond = nullptr;
 
 		releaseRouteQueue.EnqueueBack(removeRoute);
-		releaseTrackQueue.EnqueueBack(removeTrack);
+		// Only release the old track if it's different from the new trackFrom
+		// This fixes circular routes where start and destination are the same track
+		if (removeTrack != trackFrom)
+		{
+			releaseTrackQueue.EnqueueBack(removeTrack);
+		}
 	}
 
 	DataModel::LocoFunctionNr LocoBase::GetFunctionNumberFromFunctionIcon(const DataModel::LocoFunctionIcon icon) const

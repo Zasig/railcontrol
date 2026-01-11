@@ -446,6 +446,17 @@ namespace Storage
 		Execute("COMMIT;");
 	}
 
+	void SQLite::Sync()
+	{
+		if (db == nullptr)
+		{
+			return;
+		}
+		// Force SQLite to flush all pending writes to disk
+		Execute("PRAGMA wal_checkpoint(FULL);");
+		logger->Info(Languages::TextDatabaseSaved);
+	}
+
 	bool SQLite::Execute(const char* query, sqlite3_callback callback = nullptr, void* result = nullptr)
 	{
 		if (db == nullptr)

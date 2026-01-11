@@ -26,7 +26,7 @@ endif
 TMPDIR=/tmp/RailControl
 TMPDIRCYGWIN=/RailControl
 
-CXXOBJ= $(patsubst %.cpp,%.o,$(sort Version.cpp $(wildcard *.cpp)) $(wildcard Server/Web/*.cpp Server/CS2/*.cpp Server/Z21/*.cpp DataModel/*.cpp Hardware/*.cpp Hardware/Protocols/*.cpp Logger/*.cpp Network/*.cpp Storage/*.cpp Utils/*.cpp))
+CXXOBJ= $(patsubst %.cpp,%.o,$(sort Version.cpp $(wildcard *.cpp)) $(wildcard Server/Api/*.cpp Server/Web/*.cpp Server/CS2/*.cpp Server/Z21/*.cpp DataModel/*.cpp Hardware/*.cpp Hardware/Protocols/*.cpp Logger/*.cpp Network/*.cpp Storage/*.cpp Utils/*.cpp))
 
 ifdef USE_SYSTEM_LIBRARIES
 LIBS+= -lsqlite3 -lz
@@ -97,12 +97,12 @@ Hardware/zlib/%.o: Hardware/zlib/%.c Hardware/zlib/*.h
 Storage/sqlite/sqlite3.o: Storage/sqlite/sqlite3.c Storage/sqlite/sqlite3.h
 	$(CC) $(CFLAGSSQLITE) -c -o $@ $<
 
-%.o: %.cpp *.h DataModel/*.h Hardware/*.h Hardware/Protocols/*.h Logger/*.h Network/*.h Storage/*.h Utils/*.h Server/Web/*.h Server/CS2/*.h Server/Z21/*.h
+%.o: %.cpp *.h DataModel/*.h Hardware/*.h Hardware/Protocols/*.h Logger/*.h Network/*.h Storage/*.h Utils/*.h Server/Api/*.h Server/Web/*.h Server/CS2/*.h Server/Z21/*.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 .PHONY: clean
 clean:
-	rm -f *.o DataModel/*.o Hardware/*.o Hardware/Protocols/*.o Hardware/zlib/*.o Logger/*.o Network/*.o Storage/*.o Storage/sqlite/*.o Utils/*.o Server/Web/*.o Server/CS2/*.o Server/Z21/*.o
+	rm -f *.o DataModel/*.o Hardware/*.o Hardware/Protocols/*.o Hardware/zlib/*.o Logger/*.o Network/*.o Storage/*.o Storage/sqlite/*.o Utils/*.o Server/Api/*.o Server/Web/*.o Server/CS2/*.o Server/Z21/*.o
 	rm -f railcontrol
 	rm -f Documentation/de/index.html Documentation/en/index.html Documentation/es/index.html
 
