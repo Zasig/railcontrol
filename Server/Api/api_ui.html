@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RailControl API - Booster</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            font-size: 1.8rem;
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+
+        .status-container {
+            margin-bottom: 30px;
+        }
+
+        .status-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.stop {
+            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
+            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.4);
+        }
+
+        .status-indicator.go {
+            background: linear-gradient(135deg, #2ed573 0%, #27ae60 100%);
+            box-shadow: 0 4px 20px rgba(46, 213, 115, 0.4);
+        }
+
+        .status-indicator.loading {
+            background: linear-gradient(135deg, #ffa502 0%, #e67e22 100%);
+            box-shadow: 0 4px 20px rgba(255, 165, 2, 0.4);
+        }
+
+        .status-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-go {
+            background: linear-gradient(135deg, #2ed573 0%, #27ae60 100%);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(46, 213, 115, 0.3);
+        }
+
+        .btn-go:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(46, 213, 115, 0.5);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(255, 71, 87, 0.5);
+        }
+
+        .error {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 71, 87, 0.2);
+            border-radius: 8px;
+            color: #ff6b7a;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .refresh-info {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚂 RailControl</h1>
+        <p class="subtitle">Booster-Steuerung</p>
+
+        <div class="status-container">
+            <div class="status-label">Aktueller Status</div>
+            <div id="status" class="status-indicator loading">
+                <span class="status-dot"></span>
+                <span id="status-text">Laden...</span>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-stop" id="btn-stop" onclick="setBooster('stop')">
+                ⏹ Stop
+            </button>
+            <button class="btn-go" id="btn-go" onclick="setBooster('go')">
+                ▶ Go
+            </button>
+        </div>
+
+        <div id="error" class="error"></div>
+
+        <div class="refresh-info">
+            Status wird alle 2 Sekunden aktualisiert
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        async function getBoosterStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/booster`);
+                if (!response.ok) throw new Error('Server nicht erreichbar');
+                const data = await response.json();
+                updateStatusDisplay(data.state);
+                hideError();
+            } catch (error) {
+                showError('Verbindungsfehler: ' + error.message);
+            }
+        }
+
+        async function setBooster(state) {
+            const btnGo = document.getElementById('btn-go');
+            const btnStop = document.getElementById('btn-stop');
+
+            btnGo.disabled = true;
+            btnStop.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/booster`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ state: state })
+                });
+
+                if (!response.ok) throw new Error('Fehler beim Senden');
+
+                const data = await response.json();
+                updateStatusDisplay(data.state);
+                hideError();
+            } catch (error) {
+                showError('Fehler: ' + error.message);
+            } finally {
+                btnGo.disabled = false;
+                btnStop.disabled = false;
+            }
+        }
+
+        function updateStatusDisplay(state) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('status-text');
+
+            statusEl.classList.remove('stop', 'go', 'loading');
+
+            if (state === 'go') {
+                statusEl.classList.add('go');
+                statusText.textContent = 'GO';
+            } else if (state === 'stop') {
+                statusEl.classList.add('stop');
+                statusText.textContent = 'STOP';
+            } else {
+                statusEl.classList.add('loading');
+                statusText.textContent = 'Unbekannt';
+            }
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.classList.add('show');
+        }
+
+        function hideError() {
+            document.getElementById('error').classList.remove('show');
+        }
+
+        // Initial load
+        getBoosterStatus();
+
+        // Auto-refresh every 2 seconds
+        setInterval(getBoosterStatus, 2000);
+    </script>
+</body>
+</html>
+
