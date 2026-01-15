@@ -326,12 +326,54 @@ namespace Server { namespace Api
 			return;
 		}
 
-		// Route: /layout - serve the layout UI
-		if (uri == "/layout" || uri == "/layout.html")
+		// Route: /api/v1/locos/{id}
+		if (uri.find("/api/v1/locos/") == 0 && uri.length() > 14)
 		{
 			if (method == "GET")
 			{
-				ServeLayoutUI();
+				HandleLocoDetailsGet(uri);
+			}
+			else
+			{
+				SendJsonResponse(405, "{\"error\":\"Method not allowed\"}");
+			}
+			return;
+		}
+
+		// Route: /api/v1/switches/{id}/toggle - toggle switch state
+		if (uri.find("/api/v1/switches/") == 0 && uri.find("/toggle") != string::npos)
+		{
+			if (method == "POST")
+			{
+				HandleSwitchToggle(uri);
+			}
+			else
+			{
+				SendJsonResponse(405, "{\"error\":\"Method not allowed\"}");
+			}
+			return;
+		}
+
+		// Route: /api/v1/routes - get all routes
+		if (uri == "/api/v1/routes")
+		{
+			if (method == "GET")
+			{
+				HandleRoutesGet();
+			}
+			else
+			{
+				SendJsonResponse(405, "{\"error\":\"Method not allowed\"}");
+			}
+			return;
+		}
+
+		// Route: /api/v1/routes/{id}/execute - execute a route
+		if (uri.find("/api/v1/routes/") == 0 && uri.find("/execute") != string::npos)
+		{
+			if (method == "POST")
+			{
+				HandleRouteExecute(uri);
 			}
 			else
 			{
@@ -380,193 +422,6 @@ namespace Server { namespace Api
 		SendJsonResponse(200, json.str());
 	}
 
-	void ApiClient::ServeHtmlUI()
-	{
-		static const string html = R"HTML(<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RailControl API - Booster</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: #fff;
-        }
-        .container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        h1 { margin-bottom: 10px; font-size: 1.8rem; }
-        .subtitle { color: rgba(255, 255, 255, 0.6); margin-bottom: 30px; font-size: 0.9rem; }
-        .status-container { margin-bottom: 30px; }
-        .status-label { font-size: 0.9rem; color: rgba(255, 255, 255, 0.7); margin-bottom: 10px; }
-        .status-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            padding: 15px 30px;
-            border-radius: 50px;
-            font-size: 1.4rem;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-        .status-indicator.stop {
-            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
-            box-shadow: 0 4px 20px rgba(255, 71, 87, 0.4);
-        }
-        .status-indicator.go {
-            background: linear-gradient(135deg, #2ed573 0%, #27ae60 100%);
-            box-shadow: 0 4px 20px rgba(46, 213, 115, 0.4);
-        }
-        .status-indicator.loading {
-            background: linear-gradient(135deg, #ffa502 0%, #e67e22 100%);
-            box-shadow: 0 4px 20px rgba(255, 165, 2, 0.4);
-        }
-        .status-dot {
-            width: 16px; height: 16px;
-            border-radius: 50%;
-            background: #fff;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.1); }
-        }
-        .buttons { display: flex; gap: 20px; justify-content: center; }
-        button {
-            padding: 15px 40px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        button:hover { transform: translateY(-2px); }
-        button:active { transform: translateY(0); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .btn-go {
-            background: linear-gradient(135deg, #2ed573 0%, #27ae60 100%);
-            color: #fff;
-            box-shadow: 0 4px 15px rgba(46, 213, 115, 0.3);
-        }
-        .btn-go:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(46, 213, 115, 0.5); }
-        .btn-stop {
-            background: linear-gradient(135deg, #ff4757 0%, #c0392b 100%);
-            color: #fff;
-            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
-        }
-        .btn-stop:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(255, 71, 87, 0.5); }
-        .error {
-            margin-top: 20px;
-            padding: 10px 20px;
-            background: rgba(255, 71, 87, 0.2);
-            border-radius: 8px;
-            color: #ff6b7a;
-            display: none;
-        }
-        .error.show { display: block; }
-        .refresh-info { margin-top: 20px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.4); }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>&#128642; RailControl</h1>
-        <p class="subtitle">Booster-Steuerung</p>
-        <div class="status-container">
-            <div class="status-label">Aktueller Status</div>
-            <div id="status" class="status-indicator loading">
-                <span class="status-dot"></span>
-                <span id="status-text">Laden...</span>
-            </div>
-        </div>
-        <div class="buttons">
-            <button class="btn-stop" id="btn-stop" onclick="setBooster('stop')">Stop</button>
-            <button class="btn-go" id="btn-go" onclick="setBooster('go')">Go</button>
-        </div>
-        <div id="error" class="error"></div>
-        <div class="refresh-info">Status wird alle 2 Sekunden aktualisiert</div>
-    </div>
-    <script>
-        const API_BASE = window.location.origin;
-        async function getBoosterStatus() {
-            try {
-                const response = await fetch(API_BASE + '/api/v1/booster');
-                if (!response.ok) throw new Error('Server nicht erreichbar');
-                const data = await response.json();
-                updateStatusDisplay(data.state);
-                hideError();
-            } catch (error) {
-                showError('Verbindungsfehler: ' + error.message);
-            }
-        }
-        async function setBooster(state) {
-            const btnGo = document.getElementById('btn-go');
-            const btnStop = document.getElementById('btn-stop');
-            btnGo.disabled = true;
-            btnStop.disabled = true;
-            try {
-                const response = await fetch(API_BASE + '/api/v1/booster', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ state: state })
-                });
-                if (!response.ok) throw new Error('Fehler beim Senden');
-                const data = await response.json();
-                updateStatusDisplay(data.state);
-                hideError();
-            } catch (error) {
-                showError('Fehler: ' + error.message);
-            } finally {
-                btnGo.disabled = false;
-                btnStop.disabled = false;
-            }
-        }
-        function updateStatusDisplay(state) {
-            const statusEl = document.getElementById('status');
-            const statusText = document.getElementById('status-text');
-            statusEl.classList.remove('stop', 'go', 'loading');
-            if (state === 'go') {
-                statusEl.classList.add('go');
-                statusText.textContent = 'GO';
-            } else if (state === 'stop') {
-                statusEl.classList.add('stop');
-                statusText.textContent = 'STOP';
-            } else {
-                statusEl.classList.add('loading');
-                statusText.textContent = 'Unbekannt';
-            }
-        }
-        function showError(message) {
-            const errorEl = document.getElementById('error');
-            errorEl.textContent = message;
-            errorEl.classList.add('show');
-        }
-        function hideError() {
-            document.getElementById('error').classList.remove('show');
-        }
-        getBoosterStatus();
-        setInterval(getBoosterStatus, 2000);
-    </script>
-</body>
-</html>)HTML";
-		SendHtmlResponse(html);
-	}
-
 	void ApiClient::HandleLayersGet()
 	{
 		stringstream json;
@@ -611,6 +466,7 @@ namespace Server { namespace Api
 			const bool occupied = track.second->GetMainStateDelayed() == DataModel::Feedback::FeedbackStateOccupied;
 			const bool reserved = locoId.IsSet();
 			const bool blocked = track.second->GetBlocked();
+			const bool showName = track.second->GetShowName();
 
 			json << "{\"type\":\"track\""
 				<< ",\"id\":" << track.second->GetID()
@@ -623,7 +479,13 @@ namespace Server { namespace Api
 				<< ",\"trackType\":" << static_cast<int>(track.second->GetTrackType())
 				<< ",\"occupied\":" << (occupied ? "true" : "false")
 				<< ",\"reserved\":" << (reserved ? "true" : "false")
-				<< ",\"blocked\":" << (blocked ? "true" : "false");
+				<< ",\"blocked\":" << (blocked ? "true" : "false")
+				<< ",\"showName\":" << (showName ? "true" : "false");
+			if (showName)
+			{
+				const std::string& displayName = track.second->GetMainDisplayName();
+				json << ",\"displayName\":\"" << JsonEscape(displayName.size() ? displayName : track.second->GetName()) << "\"";
+			}
 			if (reserved)
 			{
 				json << ",\"locoName\":\"" << JsonEscape(manager.GetLocoBaseName(locoId)) << "\"";
@@ -752,21 +614,80 @@ namespace Server { namespace Api
 		SendJsonResponse(200, json.str());
 	}
 
-	void ApiClient::ServeLayoutUI()
+	void ApiClient::HandleLocoDetailsGet(const std::string& uri)
+	{
+		// Extract loco ID from URI (/api/v1/locos/123)
+		// "/api/v1/locos/" has 14 characters
+		std::string idStr = uri.substr(14); // Skip "/api/v1/locos/"
+		size_t queryPos = idStr.find('?');
+		if (queryPos != std::string::npos)
+		{
+			idStr = idStr.substr(0, queryPos);
+		}
+
+		LocoID locoId;
+		try
+		{
+			locoId = std::stoi(idStr);
+		}
+		catch (...)
+		{
+			SendJsonResponse(400, "{\"error\":\"Invalid loco ID\"}");
+			return;
+		}
+
+		DataModel::Loco* loco = manager.GetLoco(locoId);
+		if (!loco)
+		{
+			SendJsonResponse(404, "{\"error\":\"Loco not found\"}");
+			return;
+		}
+
+		stringstream json;
+		json << "{"
+			<< "\"id\":" << locoId
+			<< ",\"name\":\"" << JsonEscape(loco->GetName()) << "\""
+			<< ",\"speed\":" << loco->GetSpeed()
+			<< ",\"orientation\":\"" << (loco->GetOrientation() == OrientationRight ? "right" : "left") << "\""
+			<< ",\"functions\":[";
+
+		// Get only configured functions using GetFunctionStates()
+		const std::vector<DataModel::LocoFunctionEntry> functionStates = loco->GetFunctionStates();
+		bool first = true;
+		for (const auto& entry : functionStates)
+		{
+			if (!first) json << ",";
+			first = false;
+
+			json << "{"
+				<< "\"nr\":" << static_cast<int>(entry.nr)
+				<< ",\"icon\":" << static_cast<int>(entry.icon)
+				<< ",\"type\":" << static_cast<int>(entry.type)
+				<< ",\"state\":" << (entry.state == DataModel::LocoFunctionStateOn ? "true" : "false")
+				<< "}";
+		}
+
+		json << "]}";
+		SendJsonResponse(200, json.str());
+	}
+
+	void ApiClient::ServeHtmlUI()
 	{
 		static const string html = R"HTML(<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RailControl - Gleisbild</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RailControl API - Booster</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
             color: #fff;
-            overflow: hidden;
         }
         .header {
             display: flex;
@@ -775,6 +696,7 @@ namespace Server { namespace Api
             padding: 10px 20px;
             background: rgba(255,255,255,0.1);
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            flex-shrink: 0;
         }
         .header h1 { font-size: 1.2rem; }
         .header-controls { display: flex; gap: 10px; align-items: center; }
@@ -804,10 +726,60 @@ namespace Server { namespace Api
             color: #fff;
             cursor: pointer;
         }
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .routes-sidebar {
+            width: 220px;
+            background: rgba(0,0,0,0.3);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .routes-header {
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        .route-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .route-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .route-item.executing {
+            background: rgba(46, 213, 115, 0.3);
+        }
+        .route-icon {
+            width: 24px;
+            height: 24px;
+            background: #4a69bd;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .route-name {
+            flex: 1;
+            font-size: 0.85rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .layout-container {
+            flex: 1;
             position: relative;
-            width: 100%;
-            height: calc(100vh - 60px);
             overflow: auto;
             background: #16213e;
         }
@@ -824,6 +796,12 @@ namespace Server { namespace Api
         .layout-item svg {
             width: 100%;
             height: 100%;
+        }
+        .layout-item.switch-item {
+            cursor: pointer;
+        }
+        .layout-item.switch-item:hover {
+            filter: brightness(1.3);
         }
         .track { fill: #666; stroke: none; }
         .track-free .track { fill: #888; }
@@ -875,6 +853,23 @@ namespace Server { namespace Api
             border-radius: 8px;
         }
         .nav-link:hover { background: rgba(255,255,255,0.2); }
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #2ed573;
+            color: #fff;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        .notification.error { background: #ff4757; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -888,8 +883,14 @@ namespace Server { namespace Api
             <button class="booster-btn go" onclick="setBooster('go')">Go</button>
         </div>
     </div>
-    <div class="layout-container">
-        <div id="layout" class="layout"></div>
+    <div class="main-content">
+        <div class="routes-sidebar">
+            <div class="routes-header">&#128739; Fahrstrassen</div>
+            <div id="routes-list"></div>
+        </div>
+        <div class="layout-container">
+            <div id="layout" class="layout"></div>
+        </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
 
@@ -897,6 +898,7 @@ namespace Server { namespace Api
         const API_BASE = window.location.origin;
         const CELL_SIZE = 36;
         let currentLayer = 1;
+        let routes = [];
 
         async function loadLayers() {
             try {
@@ -912,6 +914,72 @@ namespace Server { namespace Api
                     select.appendChild(option);
                 });
             } catch (e) { console.error('Error loading layers:', e); }
+        }
+
+        async function loadRoutes() {
+            try {
+                const response = await fetch(API_BASE + '/api/v1/routes');
+                const data = await response.json();
+                routes = data.routes;
+                renderRoutes();
+            } catch (e) { console.error('Error loading routes:', e); }
+        }
+
+        function renderRoutes() {
+            const list = document.getElementById('routes-list');
+            list.innerHTML = '';
+            routes.forEach(route => {
+                const item = document.createElement('div');
+                item.className = 'route-item';
+                item.innerHTML = '<div class="route-icon">&#128739;</div><div class="route-name">' + route.name + '</div>';
+                item.onclick = () => executeRoute(route.id, route.name);
+                list.appendChild(item);
+            });
+        }
+
+        async function executeRoute(routeId, routeName) {
+            try {
+                showNotification('Fahrstrasse "' + routeName + '" wird ausgeführt...');
+                const response = await fetch(API_BASE + '/api/v1/routes/' + routeId + '/execute', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('Fahrstrasse "' + routeName + '" aktiviert!');
+                    loadLayout();
+                } else {
+                    showNotification('Fahrstrasse konnte nicht aktiviert werden!', true);
+                }
+            } catch (e) {
+                console.error('Error executing route:', e);
+                showNotification('Fehler beim Aktivieren der Fahrstrasse!', true);
+            }
+        }
+
+        async function toggleSwitch(switchId) {
+            try {
+                const response = await fetch(API_BASE + '/api/v1/switches/' + switchId + '/toggle', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadLayout();
+                }
+            } catch (e) {
+                console.error('Error toggling switch:', e);
+                showNotification('Fehler beim Schalten der Weiche!', true);
+            }
+        }
+
+        function showNotification(message, isError = false) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+
+            const notif = document.createElement('div');
+            notif.className = 'notification' + (isError ? ' error' : '');
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 3000);
         }
 
         async function loadLayout() {
@@ -946,7 +1014,6 @@ namespace Server { namespace Api
                 el.style.width = (CELL_SIZE * width) + 'px';
                 el.style.height = (CELL_SIZE * height) + 'px';
 
-                // Calculate translate for rotation (like original RailControl)
                 let translate = 0;
                 if (height > 1 || width > 1) {
                     if (item.rotation === 1 || item.rotation === 3) {
@@ -966,8 +1033,10 @@ namespace Server { namespace Api
                         svg = renderTrack(item, width, height, item.rotation, translate);
                         break;
                     case 'switch':
+                        el.classList.add('switch-item');
                         stateClass = item.state ? 'switch-thrown' : '';
                         svg = renderSwitch(item, item.rotation, translate);
+                        el.onclick = () => toggleSwitch(item.id);
                         break;
                     case 'signal':
                         stateClass = item.state === 0 ? 'signal-stop' : 'signal-go';
@@ -994,7 +1063,6 @@ namespace Server { namespace Api
 
                 layout.appendChild(el);
 
-                // Add loco name for reserved tracks
                 if (item.type === 'track' && item.locoName) {
                     const locoLabel = document.createElement('div');
                     locoLabel.className = 'loco-name';
@@ -1018,18 +1086,17 @@ namespace Server { namespace Api
             const w = width * CELL_SIZE;
             const h = height * CELL_SIZE;
             const rot = rotation * 90;
-            const transform = 'transform="rotate('+rot+') translate('+translate+','+translate+')" transform-origin="center"';
             switch(item.trackType) {
-                case 1: // Turn
+                case 1:
                     return '<svg viewBox="0 0 36 36" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="0,21 0,15 21,36 15,36"/></svg>';
-                case 2: // End
+                case 2:
                     return '<svg viewBox="0 0 36 '+h+'" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="15,5 21,5 21,'+h+' 15,'+h+'"/><polygon class="track" points="4,10 4,5 32,5 32,10"/></svg>';
-                case 3: // Bridge
+                case 3:
                     return '<svg viewBox="0 0 36 '+h+'" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="15,0 21,0 21,'+h+' 15,'+h+'"/><polygon class="track" points="10,3 12,5 12,'+(h-5)+' 10,'+(h-3)+'"/><polygon class="track" points="26,3 24,5 24,'+(h-5)+' 26,'+(h-3)+'"/></svg>';
-                case 6: // Link
+                case 6:
                     return '<svg viewBox="0 0 36 '+h+'" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="15,22 21,22 21,'+h+' 15,'+h+'"/><polygon class="track" points="18,1 6,22 30,22"/></svg>';
-                default: // Straight
-                    return '<svg viewBox="0 0 36 '+h+'" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="15,0 21,0 21,'+h+' 15,'+h+'"/></svg>';
+                default:
+                    return '<svg viewBox="0 0 36 '+h+'" width="'+w+'" height="'+h+'" style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"><polygon class="track" points="15,0 21,0 21,'+h+' 15,'+h+'"/><polygon class="track" points="15,0 7,8 7,'+h+' 15,'+h+'"/><polygon class="track" points="21,0 29,8 29,'+h+' 21,'+h+'"/></svg>';
             }
         }
 
@@ -1037,7 +1104,7 @@ namespace Server { namespace Api
             const rot = rotation * 90;
             const type = item.switchType || 0;
             const style = 'style="transform:rotate('+rot+'deg) translate('+translate+'px,'+translate+'px);"';
-            if (type === 1) { // Right
+            if (type === 1) {
                 return '<svg viewBox="0 0 36 36" '+style+'><polygon class="switch" points="15,0 21,0 21,36 15,36"/><polygon class="switch" points="21,15 36,0 36,6 21,21"/></svg>';
             }
             return '<svg viewBox="0 0 36 36" '+style+'><polygon class="switch" points="15,0 21,0 21,36 15,36"/><polygon class="switch" points="15,15 0,0 0,6 15,21"/></svg>';
@@ -1067,6 +1134,7 @@ namespace Server { namespace Api
         function showTooltip(e, item) {
             const tooltip = document.getElementById('tooltip');
             let text = item.name;
+            if (item.type === 'switch') text += ' (Klicken zum Schalten)';
             if (item.locoName) text += ' - ' + item.locoName;
             if (item.occupied) text += ' [belegt]';
             if (item.blocked) text += ' [blockiert]';
@@ -1103,6 +1171,7 @@ namespace Server { namespace Api
 
         // Initialize
         loadLayers();
+        loadRoutes();
         loadLayout();
         getBoosterStatus();
         setInterval(() => { loadLayout(); getBoosterStatus(); }, 2000);
@@ -1111,5 +1180,114 @@ namespace Server { namespace Api
 </html>)HTML";
 		SendHtmlResponse(html);
 	}
+
+	void ApiClient::HandleSwitchToggle(const std::string& uri)
+	{
+		// Extract switch ID from URI (/api/v1/switches/123/toggle)
+		// "/api/v1/switches/" has 17 characters
+		std::string idStr = uri.substr(17);
+		size_t togglePos = idStr.find("/toggle");
+		if (togglePos != std::string::npos)
+		{
+			idStr = idStr.substr(0, togglePos);
+		}
+
+		SwitchID switchId;
+		try
+		{
+			switchId = std::stoi(idStr);
+		}
+		catch (...)
+		{
+			SendJsonResponse(400, "{\"error\":\"Invalid switch ID\"}");
+			return;
+		}
+
+		DataModel::Switch* sw = manager.GetSwitch(switchId);
+		if (!sw)
+		{
+			SendJsonResponse(404, "{\"error\":\"Switch not found\"}");
+			return;
+		}
+
+		// Toggle switch state
+		DataModel::AccessoryState currentState = sw->GetAccessoryState();
+		DataModel::AccessoryState newState;
+
+		// Toggle between straight and turnout
+		if (currentState == DataModel::SwitchStateTurnout)
+		{
+			newState = DataModel::SwitchStateStraight;
+		}
+		else
+		{
+			newState = DataModel::SwitchStateTurnout;
+		}
+
+		manager.SwitchState(ControlTypeWebServer, switchId, newState, false);
+
+		stringstream json;
+		json << "{\"success\":true,\"id\":" << switchId << ",\"state\":" << static_cast<int>(newState) << "}";
+		SendJsonResponse(200, json.str());
+	}
+
+	void ApiClient::HandleRoutesGet()
+	{
+		stringstream json;
+		json << "{\"routes\":[";
+
+		const std::map<RouteID, DataModel::Route*>& routes = manager.RouteList();
+		bool first = true;
+		for (const auto& route : routes)
+		{
+			if (!first) json << ",";
+			first = false;
+
+			json << "{\"id\":" << route.second->GetID()
+				<< ",\"name\":\"" << JsonEscape(route.second->GetName()) << "\""
+				<< ",\"automode\":" << (route.second->GetAutomode() ? "true" : "false")
+				<< "}";
+		}
+		json << "]}";
+		SendJsonResponse(200, json.str());
+	}
+
+	void ApiClient::HandleRouteExecute(const std::string& uri)
+	{
+		// Extract route ID from URI (/api/v1/routes/123/execute)
+		// "/api/v1/routes/" has 15 characters
+		std::string idStr = uri.substr(15);
+		size_t executePos = idStr.find("/execute");
+		if (executePos != std::string::npos)
+		{
+			idStr = idStr.substr(0, executePos);
+		}
+
+		RouteID routeId;
+		try
+		{
+			routeId = std::stoi(idStr);
+		}
+		catch (...)
+		{
+			SendJsonResponse(400, "{\"error\":\"Invalid route ID\"}");
+			return;
+		}
+
+		DataModel::Route* route = manager.GetRoute(routeId);
+		if (!route)
+		{
+			SendJsonResponse(404, "{\"error\":\"Route not found\"}");
+			return;
+		}
+
+		// Execute the route asynchronously
+		manager.RouteExecuteAsync(logger, routeId);
+
+		stringstream json;
+		json << "{\"success\":true,\"id\":" << routeId << ",\"name\":\"" << JsonEscape(route->GetName()) << "\"}";
+		SendJsonResponse(200, json.str());
+	}
+
 }} // namespace Server::Api
 

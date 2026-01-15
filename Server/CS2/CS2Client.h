@@ -27,6 +27,13 @@ along with RailControl; see the file LICENCE. If not see
 #include "Network/TcpConnection.h"
 #include "Utils/Utils.h"
 
+// Forward declarations
+namespace DataModel
+{
+	class LocoBase;
+	class AccessoryBase;
+}
+
 namespace Server { namespace CS2
 {
 	class CS2Server;
@@ -66,6 +73,12 @@ namespace Server { namespace CS2
 			{
 				return terminated;
 			}
+
+			// Methods to send status updates to connected clients
+			void SendPowerOn();
+			void SendPowerOff();
+			void SendLocoInfo(const DataModel::LocoBase* loco);
+			void SendAccessoryInfo(const DataModel::AccessoryBase* accessory);
 
 		protected:
 			void Receiver() override;

@@ -68,6 +68,10 @@ namespace Server { namespace Api
 			void HandleLayersGet();
 			void HandleLayoutGet(const std::string& uri);
 			void HandleLocosGet();
+			void HandleLocoDetailsGet(const std::string& uri);
+			void HandleSwitchToggle(const std::string& uri);
+			void HandleRoutesGet();
+			void HandleRouteExecute(const std::string& uri);
 			void ServeHtmlUI();
 			void ServeLayoutUI();
 

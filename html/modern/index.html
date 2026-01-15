@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RailControl Modern Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .booster-btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .booster-off {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .booster-on {
+            background: #2ecc71;
+            color: white;
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
+        }
+
+        .track-plan {
+            margin: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .track-plan h2 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .track-plan-content {
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* Routes sidebar */
+        .routes-sidebar {
+            width: 200px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            flex-shrink: 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .routes-header {
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+            font-size: 0.9rem;
+            position: sticky;
+            top: 0;
+        }
+
+        .route-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .route-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .route-item:active {
+            background: rgba(46, 204, 113, 0.3);
+        }
+
+        .route-icon {
+            width: 20px;
+            height: 20px;
+            background: #4a69bd;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .route-name {
+            flex: 1;
+            font-size: 0.8rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #layoutContainer {
+            flex: 1;
+            position: relative;
+            min-height: 400px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 1rem;
+            overflow: auto;
+        }
+
+        #layoutWrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .layout-item {
+            position: absolute;
+        }
+
+        .track-item svg {
+            display: block;
+        }
+
+        /* Switch interactive styles */
+        .switch-item {
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .switch-item:hover {
+            filter: brightness(1.3);
+        }
+
+        .switch-item:active {
+            filter: brightness(1.5);
+        }
+
+        /* Default track color (gray) */
+        .track-item .track {
+            fill: #888;
+            transition: fill 0.3s ease;
+        }
+
+        /* Track states */
+        .track_free .track { fill: #2ecc71; }
+        .track_occupied .track { fill: #e74c3c; }
+        .track_reserved .track { fill: #f39c12; }
+        .track_blocked .track { fill: #95a5a6; }
+
+        .trackname, .loconame {
+            fill: white;
+            font-size: 10px;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Switch styles */
+        .switch { fill: #666; transition: fill 0.3s ease; }
+        .switch-arrow { fill: white; }
+        
+        .switch_turnout .turnout { fill: #2ecc71; }
+        .switch_turnout .straight { fill: #666; }
+        .switch_straight .turnout { fill: #666; }
+        .switch_straight .straight { fill: #2ecc71; }
+
+        /* Signal styles */
+        .signal { fill: #888; transition: fill 0.3s ease; }
+        .signal-light { fill: #888; transition: fill 0.3s ease; }
+        .signal_stop .signal-light { fill: #e74c3c; }
+        .signal_clear .signal-light { fill: #2ecc71; }
+
+        /* Feedback styles */
+        .feedback-circle { fill: #444; transition: fill 0.3s ease; }
+        .feedback_free .feedback-circle { fill: #444; }
+        .feedback_occupied .feedback-circle { fill: #e74c3c; }
+
+        /* Notification toast */
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #2ecc71;
+            color: white;
+            border-radius: 8px;
+            font-weight: bold;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
+        }
+        .notification.error { background: #e74c3c; }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .loco-controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .loco-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .loco-selector {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .loco-selector option {
+            background: #1e3c72;
+            color: white;
+        }
+
+        .loco-header { text-align: center; margin-bottom: 1.5rem; }
+        .loco-name { font-size: 1.3rem; font-weight: 600; }
+        .loco-type { font-size: 0.9rem; opacity: 0.7; }
+
+        .speedometer {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 1rem;
+        }
+
+        .speed-slider { width: 100%; margin: 1rem 0; }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+        }
+
+        .direction-controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-direction { background: #3498db; color: white; }
+        .btn-direction:hover { background: #2980b9; transform: translateY(-2px); }
+
+        .btn-stop {
+            background: #e74c3c;
+            color: white;
+            width: 100%;
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+        }
+        .btn-stop:hover { background: #c0392b; }
+
+        .functions {
+            margin-top: 1.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .function-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .function-nav {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .function-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+        .function-nav:not(:disabled):hover { background: rgba(255, 255, 255, 0.2); }
+
+        .function-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+
+        .function-btn {
+            padding: 0.5rem;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            min-height: 60px;
+        }
+
+        .function-btn .fn-icon {
+            font-size: 1.5rem;
+        }
+
+        .function-btn .fn-label {
+            font-size: 0.7rem;
+            opacity: 0.8;
+        }
+
+        .function-btn.active {
+            background: #f39c12;
+            border-color: #f39c12;
+            box-shadow: 0 0 15px rgba(243, 156, 18, 0.5);
+        }
+
+        .function-btn.momentary {
+            border-style: dashed;
+        }
+
+        .function-btn:hover { background: rgba(255, 255, 255, 0.2); }
+
+        @media (max-width: 1200px) {
+            .loco-controls { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 768px) {
+            .function-grid { grid-template-columns: repeat(2, 1fr); }
+            .track-plan-content { flex-direction: column; }
+            .routes-sidebar { width: 100%; max-height: 150px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>&#128642; RailControl Modern Control</h1>
+        <button class="booster-btn booster-off" id="boosterBtn" onclick="toggleBooster()">
+            &#128308; BOOSTER OFF
+        </button>
+    </div>
+
+    <div class="track-plan">
+        <h2>&#128506; GLEISPLAN</h2>
+        <div class="track-plan-content">
+            <div class="routes-sidebar">
+                <div class="routes-header">&#128740; Fahrstrassen</div>
+                <div id="routes-list">
+                    <p style="padding: 15px; opacity: 0.5; font-size: 0.8rem;">Lade Fahrstrassen...</p>
+                </div>
+            </div>
+
+            <div id="layoutContainer">
+                <div id="layoutWrapper">
+                    <!-- Layout will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="loco-controls">
+        <!-- Loco 1 -->
+        <div class="loco-card">
+            <select class="loco-selector" id="locoSelect1" onchange="selectLoco(1)">
+                <option value="">-- Lok ausw&#228;hlen --</option>
+            </select>
+
+            <div class="loco-header">
+                <div class="loco-name" id="loco1Name">Keine Lok ausgew&#228;hlt</div>
+                <div class="loco-type" id="loco1Type">-</div>
+            </div>
+
+            <canvas id="speedometer1" class="speedometer" width="200" height="200"></canvas>
+
+            <div class="speed-slider">
+                <input type="range" id="speed1" min="0" max="1000" value="0" 
+                       oninput="setSpeed(1, this.value)" disabled>
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <span id="speedDisplay1" style="font-size: 1.5rem; font-weight: bold;">0</span> km/h
+                </div>
+            </div>
+
+            <div class="direction-controls">
+                <button class="btn btn-direction" onclick="setDirection(1, false)" id="btnBack1" disabled>&#9664;&#9664; R&#252;ckw&#228;rts</button>
+                <button class="btn btn-direction" onclick="setDirection(1, true)" id="btnFwd1" disabled>Vorw&#228;rts &#9654;&#9654;</button>
+            </div>
+            <button class="btn btn-stop" onclick="emergencyStop(1)" id="btnStop1" disabled>&#128721; NOT-STOPP</button>
+
+            <div class="functions">
+                <div class="function-header">
+                    <button class="function-nav" id="loco1PrevBtn" onclick="changeFunctionPage(1, -1)" disabled>&#9664;</button>
+                    <span id="loco1FunctionRange">F0 - F7</span>
+                    <button class="function-nav" id="loco1NextBtn" onclick="changeFunctionPage(1, 1)" disabled>&#9654;</button>
+                </div>
+                <div class="function-grid" id="functions1"></div>
+            </div>
+        </div>
+
+        <!-- Loco 2 -->
+        <div class="loco-card">
+            <select class="loco-selector" id="locoSelect2" onchange="selectLoco(2)">
+                <option value="">-- Lok ausw&#228;hlen --</option>
+            </select>
+
+            <div class="loco-header">
+                <div class="loco-name" id="loco2Name">Keine Lok ausgew&#228;hlt</div>
+                <div class="loco-type" id="loco2Type">-</div>
+            </div>
+
+            <canvas id="speedometer2" class="speedometer" width="200" height="200"></canvas>
+
+            <div class="speed-slider">
+                <input type="range" id="speed2" min="0" max="1000" value="0" 
+                       oninput="setSpeed(2, this.value)" disabled>
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <span id="speedDisplay2" style="font-size: 1.5rem; font-weight: bold;">0</span> km/h
+                </div>
+            </div>
+
+            <div class="direction-controls">
+                <button class="btn btn-direction" onclick="setDirection(2, false)" id="btnBack2" disabled>&#9664;&#9664; R&#252;ckw&#228;rts</button>
+                <button class="btn btn-direction" onclick="setDirection(2, true)" id="btnFwd2" disabled>Vorw&#228;rts &#9654;&#9654;</button>
+            </div>
+            <button class="btn btn-stop" onclick="emergencyStop(2)" id="btnStop2" disabled>&#128721; NOT-STOPP</button>
+
+            <div class="functions">
+                <div class="function-header">
+                    <button class="function-nav" id="loco2PrevBtn" onclick="changeFunctionPage(2, -1)" disabled>&#9664;</button>
+                    <span id="loco2FunctionRange">F0 - F7</span>
+                    <button class="function-nav" id="loco2NextBtn" onclick="changeFunctionPage(2, 1)" disabled>&#9654;</button>
+                </div>
+                <div class="function-grid" id="functions2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const BACKEND_URL = window.location.origin;
+        const API_URL = window.location.protocol + '//' + window.location.hostname + ':8083';
+        const EDGE_LENGTH = 36;
+        
+        // Function type constants (from LocoFunctions.h)
+        const LocoFunctionTypeNone = 0;
+        const LocoFunctionTypePermanent = 1;
+        const LocoFunctionTypeMoment = 2;
+        const LocoFunctionTypeFlashing = 3;
+        const LocoFunctionTypeTimer = 4;
+        
+        // State
+        let boosterState = false;
+        let allLocos = [];
+        let locos = {
+            1: { id: 0, name: '', speed: 0, forward: true, functions: {}, functionPage: 0, maxFunctions: 0 },
+            2: { id: 0, name: '', speed: 0, forward: true, functions: {}, functionPage: 0, maxFunctions: 0 }
+        };
+        let currentLayer = 1;
+        let layoutData = null;
+
+        // Function icon mapping based on LocoFunctionIcon enum from LocoFunctions.h
+        const functionIcons = {
+            0: '&#9711;',      // None
+            1: '&#9899;',      // Default
+            2: '&#8644;',      // ShuntingMode
+            3: '&#9881;',      // Inertia
+            32: '&#128161;',   // Light
+            33: '&#128161;',   // HeadlightLowBeamForward
+            34: '&#128161;',   // HeadlightLowBeamReverse
+            35: '&#128161;',   // HeadlightHighBeamForward
+            36: '&#128161;',   // HeadlightHighBeamReverse
+            37: '&#128308;',   // BacklightForward
+            38: '&#128308;',   // BacklightReverse
+            39: '&#128161;',   // ShuntingLight
+            40: '&#10024;',    // BlinkingLight
+            41: '&#128161;',   // InteriorLight1
+            42: '&#128161;',   // InteriorLight2
+            43: '&#128161;',   // TableLight1
+            44: '&#128161;',   // CabLight1
+            45: '&#128161;',   // CabLight2
+            46: '&#128161;',   // CabLight12
+            47: '&#128161;',   // DriversDeskLight
+            48: '&#128649;',   // TrainDestinationIndicator
+            49: '&#128290;',   // LocomotiveNumberIndicator
+            50: '&#128161;',   // EngineLight
+            51: '&#128293;',   // FireBox
+            52: '&#128161;',   // StairsLight
+            64: '&#128168;',   // SmokeGenerator
+            65: '&#128279;',   // Telex1
+            66: '&#128279;',   // Telex2
+            67: '&#128279;',   // Telex12
+            68: '&#11014;',    // Panto1
+            69: '&#11014;',    // Panto2
+            70: '&#11014;',    // Panto12
+            71: '&#11014;',    // Up
+            72: '&#11015;',    // Down
+            73: '&#8597;',     // UpDown1
+            74: '&#8597;',     // UpDown2
+            75: '&#11013;',    // Left
+            76: '&#10145;',    // Right
+            77: '&#8596;',     // LeftRight
+            78: '&#8630;',     // TurnLeft
+            79: '&#8631;',     // TurnRight
+            80: '&#128260;',   // Turn
+            81: '&#127959;',   // Crane
+            82: '&#129522;',   // Magnet
+            83: '&#10551;',    // CraneHook
+            84: '&#128168;',   // Fan
+            85: '&#9209;',     // Break
+            96: '&#128263;',   // NoSound
+            97: '&#128266;',   // SoundGeneral
+            98: '&#128646;',   // Running1
+            99: '&#128646;',   // Running2
+            100: '&#9881;',    // Engine1
+            101: '&#9881;',    // Engine2
+            102: '&#9209;',    // Break1
+            103: '&#9209;',    // Break2
+            104: '&#8634;',    // Curve
+            105: '&#128227;',  // Horn1
+            106: '&#128227;',  // Horn2
+            107: '&#127930;',  // Whistle1
+            108: '&#127930;',  // Whistle2
+            109: '&#128276;',  // Bell
+            110: '&#128226;',  // StationAnnouncement1
+            111: '&#128226;',  // StationAnnouncement2
+            112: '&#128226;',  // StationAnnouncement3
+            113: '&#128172;',  // Speak
+            114: '&#128251;',  // Radio
+            115: '&#127925;',  // Music1
+            116: '&#127925;',  // Music2
+            117: '&#128682;',  // OpenDoor
+            118: '&#128682;',  // CloseDoor
+            119: '&#128168;',  // Fan1
+            120: '&#128168;',  // Fan2
+            121: '&#128168;',  // Fan3
+            122: '&#9935;',    // ShovelCoal
+            123: '&#128168;',  // CompressedAir
+            124: '&#128168;',  // ReliefValve
+            125: '&#128168;',  // SteamBlowOut
+            126: '&#128168;',  // SteamBlow
+            127: '&#128167;',  // DrainValve
+            128: '&#128296;',  // ShakingRust
+            129: '&#128168;',  // AirPump
+            130: '&#128167;',  // WaterPump
+            131: '&#9899;',    // BufferPush
+            132: '&#9881;',    // Generator
+            133: '&#9881;',    // GearBox
+            134: '&#10133;',   // GearUp
+            135: '&#10134;',   // GearDown
+            136: '&#128167;',  // FillWater
+            137: '&#9981;',    // FillDiesel
+            138: '&#9981;',    // FillGas
+            139: '&#127958;',  // Sand
+            140: '&#128279;',  // RailJoint
+            141: '&#128279;',  // Coupler
+            142: '&#11014;',   // Panto
+            143: '&#128268;',  // MainSwitch
+            144: '&#128266;',  // SoundLouder
+            145: '&#128265;',  // SoundLower
+            146: '&#9209;'     // NoBreak
+        };
+
+        // Get icon for function
+        function getFunctionIcon(iconType) {
+            return functionIcons[iconType] || '&#9899;';
+        }
+
+        // Initialize
+        async function init() {
+            drawSpeedometer(1, 0);
+            drawSpeedometer(2, 0);
+            await loadAllLocos();
+            await loadLayout();
+            await loadRoutes();
+            startPolling();
+        }
+
+        // Load all locomotives for dropdowns
+        async function loadAllLocos() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/locos`);
+                const data = await response.json();
+                allLocos = data.locos || [];
+                
+                const select1 = document.getElementById('locoSelect1');
+                const select2 = document.getElementById('locoSelect2');
+                
+                allLocos.forEach(loco => {
+                    const option1 = document.createElement('option');
+                    option1.value = loco.id;
+                    option1.textContent = loco.name;
+                    select1.appendChild(option1);
+                    
+                    const option2 = document.createElement('option');
+                    option2.value = loco.id;
+                    option2.textContent = loco.name;
+                    select2.appendChild(option2);
+                });
+            } catch (error) {
+                console.error('Error loading locos:', error);
+            }
+        }
+
+        // Load layout from API
+        async function loadLayout() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/layout?layer=${currentLayer}`);
+                const data = await response.json();
+                layoutData = data;
+                renderLayout(data);
+            } catch (error) {
+                console.error('Error loading layout:', error);
+            }
+        }
+
+        // Load routes from API
+        async function loadRoutes() {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/routes`);
+                const data = await response.json();
+                renderRoutes(data.routes || []);
+            } catch (error) {
+                console.error('Error loading routes:', error);
+                document.getElementById('routes-list').innerHTML = 
+                    '<p style="padding: 15px; opacity: 0.5; font-size: 0.8rem;">Fehler beim Laden</p>';
+            }
+        }
+
+        // Render routes list
+        function renderRoutes(routes) {
+            const list = document.getElementById('routes-list');
+            if (!routes || routes.length === 0) {
+                list.innerHTML = '<p style="padding: 15px; opacity: 0.5; font-size: 0.8rem;">Keine Fahrstrassen</p>';
+                return;
+            }
+            
+            list.innerHTML = '';
+            routes.forEach(route => {
+                const item = document.createElement('div');
+                item.className = 'route-item';
+                item.innerHTML = `<div class="route-icon">&#128740;</div><div class="route-name">${route.name}</div>`;
+                item.onclick = () => executeRoute(route.id, route.name);
+                list.appendChild(item);
+            });
+        }
+
+        // Execute a route
+        async function executeRoute(routeId, routeName) {
+            try {
+                showNotification(`Fahrstrasse "${routeName}" wird ausgef\u00fchrt...`);
+                const response = await fetch(`${API_URL}/api/v1/routes/${routeId}/execute`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showNotification(`Fahrstrasse "${routeName}" aktiviert!`);
+                    loadLayout();
+                } else {
+                    showNotification('Fahrstrasse konnte nicht aktiviert werden!', true);
+                }
+            } catch (error) {
+                console.error('Error executing route:', error);
+                showNotification('Fehler beim Aktivieren der Fahrstrasse!', true);
+            }
+        }
+
+        // Toggle switch state
+        async function toggleSwitch(switchId) {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/switches/${switchId}/toggle`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadLayout();
+                } else {
+                    showNotification('Fehler beim Schalten der Weiche!', true);
+                }
+            } catch (error) {
+                console.error('Error toggling switch:', error);
+                showNotification('Fehler beim Schalten der Weiche!', true);
+            }
+        }
+
+        // Show notification toast
+        function showNotification(message, isError = false) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+
+            const notif = document.createElement('div');
+            notif.className = 'notification' + (isError ? ' error' : '');
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 3000);
+        }
+
+        // Render layout with SVG
+        function renderLayout(data) {
+            const container = document.getElementById('layoutContainer');
+            container.innerHTML = '';
+            
+            if (!data || !data.items) return;
+            
+            let maxX = 0, maxY = 0;
+            data.items.forEach(item => {
+                const w = item.width || 1;
+                const h = item.height || 1;
+                maxX = Math.max(maxX, item.posX + w);
+                maxY = Math.max(maxY, item.posY + h);
+            });
+            
+            const wrapper = document.createElement('div');
+            wrapper.id = 'layoutWrapper';
+            wrapper.style.width = (maxX * EDGE_LENGTH) + 'px';
+            wrapper.style.height = (maxY * EDGE_LENGTH) + 'px';
+            container.appendChild(wrapper);
+            
+            data.items.forEach(item => {
+                let el = null;
+                switch (item.type) {
+                    case 'track': el = createTrackElement(item); break;
+                    case 'switch': el = createSwitchElement(item); break;
+                    case 'signal': el = createSignalElement(item); break;
+                    case 'feedback': el = createFeedbackElement(item); break;
+                }
+                if (el) wrapper.appendChild(el);
+            });
+        }
+
+        // Create track SVG element
+        function createTrackElement(track) {
+            const div = document.createElement('div');
+            div.className = 'layout-item track-item';
+            div.style.left = (track.posX * EDGE_LENGTH) + 'px';
+            div.style.top = (track.posY * EDGE_LENGTH) + 'px';
+            
+            let statusClass = 'track_free';
+            if (track.blocked) statusClass = 'track_blocked';
+            else if (track.occupied) statusClass = 'track_occupied';
+            else if (track.reserved) statusClass = 'track_reserved';
+            div.classList.add(statusClass);
+            
+            const height = track.height || 1;
+            const width = track.width || 1;
+            const layoutHeight = EDGE_LENGTH * height;
+            const layoutWidth = EDGE_LENGTH * width;
+            
+            let translate = 0;
+            if (height > 1 || width > 1) {
+                if (track.rotation === 1 || track.rotation === 3) {
+                    translate = ((height - width) * EDGE_LENGTH) / 2;
+                }
+                if (track.rotation === 1) translate = -translate;
+            }
+            
+            const rotation = track.rotation * 90;
+            const transformStyle = `transform:rotate(${rotation}deg) translate(${translate}px,${translate}px);`;
+            
+            let svgContent = '';
+            switch (track.trackType) {
+                case 1: svgContent = `<polygon class="track" points="0,21 0,15 21,36 15,36"/>`; break;
+                case 2: svgContent = `<polygon class="track" points="15,5 21,5 21,${layoutHeight} 15,${layoutHeight}"/><polygon class="track" points="4,10 4,5 32,5 32,10"/>`; break;
+                default:
+                    svgContent = `<polygon class="track" points="15,0 21,0 21,${layoutHeight} 15,${layoutHeight}"/>`;
+                    if (track.locoName) {
+                        svgContent += `<text class="loconame" x="-${layoutHeight-1}" y="11" transform="rotate(270 0,0)">${track.locoName}</text>`;
+                    }
+                    if (track.showName && (track.displayName || track.name)) {
+                        svgContent += `<text class="trackname" x="-${layoutHeight-1}" y="33" transform="rotate(270 0,0)">${track.displayName || track.name}</text>`;
+                    }
+                    break;
+            }
+            
+            div.innerHTML = `<svg height="${layoutHeight}" width="${layoutWidth}" style="${transformStyle}">${svgContent}</svg>`;
+            return div;
+        }
+
+        // Create switch SVG element - CLICKABLE
+        function createSwitchElement(sw) {
+            const div = document.createElement('div');
+            div.className = 'layout-item switch-item';
+            div.style.left = (sw.posX * EDGE_LENGTH) + 'px';
+            div.style.top = (sw.posY * EDGE_LENGTH) + 'px';
+            div.title = sw.name + ' (Klicken zum Schalten)';
+            div.onclick = () => toggleSwitch(sw.id);
+            
+            const rotation = sw.rotation * 90;
+            const state = sw.state || 0;
+            div.classList.add(state === 1 ? 'switch_straight' : 'switch_turnout');
+            
+            let svgContent = '';
+            switch (sw.switchType) {
+                case 1: // Right
+                    svgContent = `<polygon points="21,30 21,36 15,36" class="switch-arrow"/>
+                                  <polygon points="21,30 36,15 36,21 21,36" class="switch turnout"/>
+                                  <polygon points="15,0 21,0 21,30 15,36" class="switch straight"/>`;
+                    break;
+                default: // Left
+                    svgContent = `<polygon points="15,30 21,36 15,36" class="switch-arrow"/>
+                                  <polygon points="0,15 15,30 15,36 0,21" class="switch turnout"/>
+                                  <polygon points="15,0 21,0 21,36 15,30" class="switch straight"/>`;
+                    break;
+            }
+            
+            div.innerHTML = `<svg width="${EDGE_LENGTH}" height="${EDGE_LENGTH}" style="transform:rotate(${rotation}deg);">${svgContent}</svg>`;
+            return div;
+        }
+
+        // Create signal SVG element
+        function createSignalElement(sig) {
+            const div = document.createElement('div');
+            div.className = 'layout-item signal-item';
+            div.style.left = (sig.posX * EDGE_LENGTH) + 'px';
+            div.style.top = (sig.posY * EDGE_LENGTH) + 'px';
+            
+            const height = sig.height || 1;
+            const layoutHeight = EDGE_LENGTH * height;
+            const rotation = sig.rotation * 90;
+            
+            div.classList.add(sig.state === 0 ? 'signal_stop' : 'signal_clear');
+            
+            let svgContent = `<polygon points="15,0 21,0 21,${layoutHeight} 15,${layoutHeight}" fill="white"/>
+                              <circle class="signal-light" cx="18" cy="8" r="6"/>`;
+            
+            div.innerHTML = `<svg width="${EDGE_LENGTH}" height="${layoutHeight}" style="transform:rotate(${rotation}deg);">${svgContent}</svg>`;
+            return div;
+        }
+
+        // Create feedback SVG element
+        function createFeedbackElement(fb) {
+            const div = document.createElement('div');
+            div.className = 'layout-item feedback-item';
+            div.style.left = (fb.posX * EDGE_LENGTH) + 'px';
+            div.style.top = (fb.posY * EDGE_LENGTH) + 'px';
+            
+            const rotation = fb.rotation * 90;
+            div.classList.add(fb.state ? 'feedback_occupied' : 'feedback_free');
+            
+            div.innerHTML = `<svg width="${EDGE_LENGTH}" height="${EDGE_LENGTH}" style="transform:rotate(${rotation}deg);">
+                              <circle r="12" cx="18" cy="18" stroke="white" stroke-width="2" class="feedback-circle"/>
+                            </svg>`;
+            return div;
+        }
+
+        // Select locomotive
+        async function selectLoco(slotNum) {
+            const selectElement = document.getElementById(`locoSelect${slotNum}`);
+            const locoId = parseInt(selectElement.value);
+            
+            if (!locoId) {
+                locos[slotNum] = { id: 0, name: '', speed: 0, forward: true, functions: {}, functionPage: 0, maxFunctions: 0 };
+                document.getElementById(`loco${slotNum}Name`).textContent = 'Keine Lok ausgew&#228;hlt';
+                disableControls(slotNum);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/locos/${locoId}`);
+                if (response.ok) {
+                    const locoDetails = await response.json();
+                    locos[slotNum].id = locoDetails.id;
+                    locos[slotNum].name = locoDetails.name;
+                    locos[slotNum].speed = locoDetails.speed || 0;
+                    locos[slotNum].forward = locoDetails.orientation === 'right';
+                    locos[slotNum].functions = {};
+                    let maxFn = -1;
+                    
+                    if (locoDetails.functions) {
+                        locoDetails.functions.forEach(fn => {
+                            locos[slotNum].functions[fn.nr] = { 
+                                state: fn.state, 
+                                icon: fn.icon, 
+                                type: fn.type,
+                                timer: fn.timer || 0
+                            };
+                            maxFn = Math.max(maxFn, fn.nr);
+                        });
+                    }
+                    locos[slotNum].maxFunctions = maxFn >= 0 ? maxFn + 1 : 0;
+                    locos[slotNum].functionPage = 0;
+                }
+            } catch (error) {
+                const loco = allLocos.find(l => l.id === locoId);
+                if (loco) {
+                    locos[slotNum].id = loco.id;
+                    locos[slotNum].name = loco.name;
+                    locos[slotNum].speed = loco.speed || 0;
+                    locos[slotNum].maxFunctions = 8;
+                    for (let i = 0; i < 8; i++) {
+                        locos[slotNum].functions[i] = { state: false, icon: 1, type: 1, timer: 0 };
+                    }
+                }
+            }
+            
+            document.getElementById(`loco${slotNum}Name`).textContent = locos[slotNum].name;
+            document.getElementById(`speedDisplay${slotNum}`).textContent = locos[slotNum].speed;
+            document.getElementById(`speed${slotNum}`).value = locos[slotNum].speed;
+            
+            drawSpeedometer(slotNum, locos[slotNum].speed);
+            enableControls(slotNum);
+            renderFunctions(slotNum);
+        }
+
+        function enableControls(slotNum) {
+            document.getElementById(`speed${slotNum}`).disabled = false;
+            document.getElementById(`btnBack${slotNum}`).disabled = false;
+            document.getElementById(`btnFwd${slotNum}`).disabled = false;
+            document.getElementById(`btnStop${slotNum}`).disabled = false;
+        }
+
+        function disableControls(slotNum) {
+            document.getElementById(`speed${slotNum}`).disabled = true;
+            document.getElementById(`btnBack${slotNum}`).disabled = true;
+            document.getElementById(`btnFwd${slotNum}`).disabled = true;
+            document.getElementById(`btnStop${slotNum}`).disabled = true;
+            renderFunctions(slotNum);
+        }
+
+        // Draw speedometer
+        function drawSpeedometer(locoNum, speed) {
+            const canvas = document.getElementById(`speedometer${locoNum}`);
+            const ctx = canvas.getContext('2d');
+            const centerX = 100, centerY = 100, radius = 80;
+            
+            ctx.clearRect(0, 0, 200, 200);
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            for (let i = 0; i <= 10; i++) {
+                const angle = (Math.PI / 1.5) + (i * (Math.PI * 1.3) / 10);
+                ctx.beginPath();
+                ctx.moveTo(centerX + Math.cos(angle) * (radius - 10), centerY + Math.sin(angle) * (radius - 10));
+                ctx.lineTo(centerX + Math.cos(angle) * (radius - 20), centerY + Math.sin(angle) * (radius - 20));
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            const needleAngle = (Math.PI / 1.5) + ((speed / 1000) * (Math.PI * 1.3));
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + Math.cos(needleAngle) * (radius - 25), centerY + Math.sin(needleAngle) * (radius - 25));
+            ctx.strokeStyle = '#3498db';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = '#3498db';
+            ctx.fill();
+            
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('km/h', centerX, centerY + 40);
+        }
+
+        // Render functions with icons
+        function renderFunctions(locoNum) {
+            const loco = locos[locoNum];
+            const container = document.getElementById(`functions${locoNum}`);
+            const page = loco.functionPage;
+            const startF = page * 8;
+            const endF = Math.min(startF + 8, loco.maxFunctions);
+            
+            if (!loco.id || loco.maxFunctions === 0) {
+                container.innerHTML = '<p style="text-align:center;opacity:0.5;">Keine Funktionen</p>';
+                document.getElementById(`loco${locoNum}PrevBtn`).disabled = true;
+                document.getElementById(`loco${locoNum}NextBtn`).disabled = true;
+                return;
+            }
+            
+            let html = '';
+            for (let i = startF; i < endF; i++) {
+                const fn = loco.functions[i];
+                if (!fn) continue;
+                const isActive = fn.state || false;
+                const isMomentary = fn.type === LocoFunctionTypeMoment;
+                const icon = getFunctionIcon(fn.icon);
+                
+                html += `<button class="function-btn ${isActive ? 'active' : ''} ${isMomentary ? 'momentary' : ''}" 
+                                 onclick="toggleFunction(${locoNum}, ${i})"
+                                 title="${isMomentary ? 'Momentfunktion' : 'Dauerfunktion'}">
+                            <span class="fn-icon">${icon}</span>
+                            <span class="fn-label">F${i}</span>
+                         </button>`;
+            }
+            
+            container.innerHTML = html || '<p style="text-align:center;opacity:0.5;">Keine Funktionen</p>';
+            document.getElementById(`loco${locoNum}FunctionRange`).textContent = `F${startF} - F${Math.min(startF + 7, loco.maxFunctions - 1)}`;
+            document.getElementById(`loco${locoNum}PrevBtn`).disabled = (page === 0);
+            document.getElementById(`loco${locoNum}NextBtn`).disabled = (endF >= loco.maxFunctions);
+        }
+
+        function changeFunctionPage(locoNum, delta) {
+            const loco = locos[locoNum];
+            const maxPage = Math.floor((loco.maxFunctions - 1) / 8);
+            loco.functionPage = Math.max(0, Math.min(maxPage, loco.functionPage + delta));
+            renderFunctions(locoNum);
+        }
+
+        // Toggle booster
+        async function toggleBooster() {
+            boosterState = !boosterState;
+            const btn = document.getElementById('boosterBtn');
+            
+            try {
+                await fetch(`${BACKEND_URL}/?cmd=booster&on=${boosterState ? '1' : '0'}`);
+                btn.className = boosterState ? 'booster-btn booster-on' : 'booster-btn booster-off';
+                btn.innerHTML = boosterState ? '&#128994; BOOSTER ON' : '&#128308; BOOSTER OFF';
+            } catch (error) {
+                console.error('Error toggling booster:', error);
+            }
+        }
+
+        // Set speed
+        async function setSpeed(locoNum, speed) {
+            const loco = locos[locoNum];
+            if (!loco.id) return;
+            
+            loco.speed = parseInt(speed);
+            document.getElementById(`speedDisplay${locoNum}`).textContent = speed;
+            drawSpeedometer(locoNum, speed);
+            
+            try {
+                await fetch(`${BACKEND_URL}/?cmd=locospeed&loco=${loco.id}&speed=${speed}`);
+            } catch (error) {
+                console.error('Error setting speed:', error);
+            }
+        }
+
+        // Set direction
+        async function setDirection(locoNum, forward) {
+            const loco = locos[locoNum];
+            if (!loco.id) return;
+            
+            loco.forward = forward;
+            try {
+                await fetch(`${BACKEND_URL}/?cmd=locoorientation&loco=${loco.id}&on=${forward ? '1' : '0'}`);
+            } catch (error) {
+                console.error('Error setting direction:', error);
+            }
+        }
+
+        // Emergency stop
+        function emergencyStop(locoNum) {
+            setSpeed(locoNum, 0);
+            document.getElementById(`speed${locoNum}`).value = 0;
+        }
+
+        // Toggle function with momentary support
+        async function toggleFunction(locoNum, fnNum) {
+            const loco = locos[locoNum];
+            if (!loco.id || !loco.functions[fnNum]) return;
+            
+            const fn = loco.functions[fnNum];
+            const isMomentary = fn.type === LocoFunctionTypeMoment;
+            
+            // Toggle state
+            fn.state = !fn.state;
+            renderFunctions(locoNum);
+            
+            try {
+                await fetch(`${BACKEND_URL}/?cmd=locofunction&loco=${loco.id}&function=${fnNum}&on=${fn.state ? '1' : '0'}`);
+                
+                // For momentary functions, automatically turn off after 500ms
+                if (isMomentary && fn.state) {
+                    setTimeout(async () => {
+                        fn.state = false;
+                        renderFunctions(locoNum);
+                        await fetch(`${BACKEND_URL}/?cmd=locofunction&loco=${loco.id}&function=${fnNum}&on=0`);
+                    }, 500);
+                }
+            } catch (error) {
+                // Revert on error
+                fn.state = !fn.state;
+                renderFunctions(locoNum);
+            }
+        }
+
+        // Start polling
+        function startPolling() {
+            setInterval(() => { loadLayout(); }, 2000);
+        }
+
+        // Initialize on load
+        window.onload = init;
+    </script>
+</body>
+</html>

@@ -20,9 +20,12 @@ along with RailControl; see the file LICENCE. If not see
 
 #include <cstring>		//memset
 
+#include "DataModel/AccessoryBase.h"
+#include "DataModel/LocoBase.h"
 #include "DataModel/ObjectIdentifier.h"
 #include "Manager.h"
 #include "Server/CS2/CS2Client.h"
+#include "Utils/Integer.h"
 #include "Utils/Utils.h"
 
 using DataModel::ObjectIdentifier;
@@ -82,4 +85,78 @@ namespace Server { namespace CS2
 			logger->Error(Languages::TextUnableToSendDataToControl);
 		}
 	}
+
+	void CS2Client::SendPowerOn()
+	{
+		unsigned char buffer[CANCommandBufferLength];
+		CreateCommandHeader(buffer, CanCommandSystem, CanResponseResponse, 5);
+		buffer[5] = 0x00;
+		buffer[6] = 0x00;
+		buffer[7] = 0x00;
+		buffer[8] = 0x00;
+		buffer[9] = CanSubCommandGo; // System Go
+		logger->HexOut(buffer, CANCommandBufferLength);
+		Send(buffer);
+	}
+
+	void CS2Client::SendPowerOff()
+	{
+		unsigned char buffer[CANCommandBufferLength];
+		CreateCommandHeader(buffer, CanCommandSystem, CanResponseResponse, 5);
+		buffer[5] = 0x00;
+		buffer[6] = 0x00;
+		buffer[7] = 0x00;
+		buffer[8] = 0x00;
+		buffer[9] = CanSubCommandStop; // System Stop
+		logger->HexOut(buffer, CANCommandBufferLength);
+		Send(buffer);
+	}
+
+	void CS2Client::SendLocoInfo(const DataModel::LocoBase* loco)
+	{
+		if (loco == nullptr)
+		{
+			return;
+		}
+
+		const Protocol protocol = loco->GetProtocol();
+		const Address address = loco->GetAddress();
+
+		// Send speed
+		{
+			unsigned char buffer[CANCommandBufferLength];
+			CreateCommandHeader(buffer, CanCommandLocoSpeed, CanResponseResponse, 6);
+			CreateLocalIDLoco(buffer, protocol, address);
+			Utils::Integer::ShortToDataBigEndian(loco->GetSpeed(), buffer + 9);
+			logger->HexOut(buffer, CANCommandBufferLength);
+			Send(buffer);
+		}
+
+		// Send direction
+		{
+			unsigned char buffer[CANCommandBufferLength];
+			CreateCommandHeader(buffer, CanCommandLocoDirection, CanResponseResponse, 5);
+			CreateLocalIDLoco(buffer, protocol, address);
+			buffer[9] = (loco->GetOrientation() == OrientationRight ? 1 : 2);
+			logger->HexOut(buffer, CANCommandBufferLength);
+			Send(buffer);
+		}
+	}
+
+	void CS2Client::SendAccessoryInfo(const DataModel::AccessoryBase* accessory)
+	{
+		if (accessory == nullptr)
+		{
+			return;
+		}
+
+		unsigned char buffer[CANCommandBufferLength];
+		CreateCommandHeader(buffer, CanCommandAccessory, CanResponseResponse, 6);
+		CreateLocalIDAccessory(buffer, accessory->GetProtocol(), accessory->GetAddress());
+		buffer[9] = accessory->GetAccessoryState() & 0x03;
+		buffer[10] = 1; // Power on
+		logger->HexOut(buffer, CANCommandBufferLength);
+		Send(buffer);
+	}
+
 }} // namespace Server::CS2

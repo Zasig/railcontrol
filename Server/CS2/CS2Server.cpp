@@ -121,6 +121,9 @@ namespace Server { namespace CS2
 			return;
 		}
 
+        // allow sending broadcast replies
+        setsockopt(udpServerSocket, SOL_SOCKET, SO_BROADCAST, (const void*)&on, sizeof(on));
+
 		if (!runUdp)
 		{
 			close(udpServerSocket);
@@ -162,29 +165,49 @@ namespace Server { namespace CS2
 
 			static const int CANCommandBufferLength = 13;
 			unsigned char buffer[CANCommandBufferLength];
-			memset(reinterpret_cast<char*>(&clientAddress), 0, sizeof(clientAddressLength));
-			ssize_t size = recvfrom(udpServerSocket, buffer, sizeof(buffer), 0, reinterpret_cast<struct sockaddr*>(&clientAddress), &clientAddressLength);
-			udpLogger->HexIn(buffer, size);
+            memset(reinterpret_cast<char*>(&clientAddress), 0, sizeof(clientAddress));
+            ssize_t size = recvfrom(udpServerSocket, buffer, sizeof(buffer), 0, reinterpret_cast<struct sockaddr*>(&clientAddress), &clientAddressLength);
+            struct sockaddr_in* clientAddress4_log = reinterpret_cast<struct sockaddr_in*>(&clientAddress);
+            char clientIpLog[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &clientAddress4_log->sin_addr, clientIpLog, sizeof(clientIpLog));
+            udpLogger->Debug("UDP received from {0}:{1} size {2}", std::string(clientIpLog), ntohs(clientAddress4_log->sin_port), static_cast<int>(size));
+            udpLogger->HexIn(buffer, size);
 			if (size != CANCommandBufferLength)
 			{
 				continue;
 			}
 
-			buffer[0] = 0x00;
-			buffer[1] = 0x30;
-			buffer[2] = 0x00;
-			buffer[3] = 0x00;
-			buffer[4] = 0x08;
-			buffer[5] = 0x00;
-			buffer[6] = 0x00;
-			buffer[7] = 0x00;
-			buffer[8] = 0x00;
-			buffer[9] = 0x03;
-			buffer[10] = 0x08;
-			buffer[11] = 0xff;
-			buffer[12] = 0xff;
+            // Build Ping response using the hash from the received packet so the client recognizes it
+            unsigned char reply[CANCommandBufferLength];
+            // set prio/command byte - echo command header but set response bit in byte 1
+            reply[0] = buffer[0];
+            reply[1] = buffer[1] | 0x01; // set response bit
+            // copy hash from requester so their Parse() matches
+            reply[2] = buffer[2];
+            reply[3] = buffer[3];
+            // length of payload = 8 (device info + version + device type)
+            reply[4] = 0x08;
+            // copy bytes 5..10 (reserved, device id, major, minor) from requester to keep versions/device id
+            memcpy(reply + 5, buffer + 5, 6);
+            // device type = CanDeviceCs2Main (0xFFFF)
+            reply[11] = 0xFF;
+            reply[12] = 0xFF;
 
-			sendto(udpServerSocket, buffer, sizeof(buffer), 0, reinterpret_cast<struct sockaddr*>(&clientAddress), sizeof(clientAddress));
+            // Send response to client's CS2 sender port (15730) — clients expect replies on that port
+            struct sockaddr_in* clientAddress4 = reinterpret_cast<struct sockaddr_in*>(&clientAddress);
+            clientAddress4->sin_port = htons(CS2SenderPort);
+            char clientIp[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &clientAddress4->sin_addr, clientIp, sizeof(clientIp));
+            int sendRes = sendto(udpServerSocket, reply, sizeof(reply), 0, reinterpret_cast<struct sockaddr*>(clientAddress4), sizeof(struct sockaddr_in));
+            if (sendRes < 0)
+            {
+                udpLogger->Debug("Unable to send UDP response to {0}:{1}: {2}", std::string(clientIp), ntohs(clientAddress4->sin_port), strerror(errno));
+            }
+            else
+            {
+                udpLogger->Debug("UDP response sent to {0}:{1}", std::string(clientIp), ntohs(clientAddress4->sin_port));
+                udpLogger->HexOut(reply, CANCommandBufferLength);
+            }
 //			sockaddr_in* clientAddress4 = reinterpret_cast<struct sockaddr_in*>(&clientAddress);
 //			clientAddress4->sin_port = htons(CS2SenderPort);
 //			Network::UdpConnection udpConnection(logger, reinterpret_cast<struct sockaddr*>(clientAddress4));
@@ -199,17 +222,17 @@ namespace Server { namespace CS2
 	{
 		if (status == BoosterStateGo)
 		{
-//			for (auto client : clients)
-//			{
-//				reinterpret_cast<CS2Client*>(client)->SendPowerOn();
-//			}
+			for (auto client : clients)
+			{
+				client->SendPowerOn();
+			}
 		}
 		else
 		{
-//			for (auto client : clients)
-//			{
-//				reinterpret_cast<CS2Client*>(client)->SendPowerOff();
-//			}
+			for (auto client : clients)
+			{
+				client->SendPowerOff();
+			}
 		}
 	}
 
@@ -221,10 +244,10 @@ namespace Server { namespace CS2
 		{
 			return;
 		}
-//		for (auto client : clients)
-//		{
-//			reinterpret_cast<CS2Client*>(client)->SendLocoInfo(locoBase);
-//		}
+		for (auto client : clients)
+		{
+			client->SendLocoInfo(locoBase);
+		}
 	}
 
 	void CS2Server::LocoBaseOrientation(__attribute__((unused)) const ControlType controlType,
@@ -235,10 +258,10 @@ namespace Server { namespace CS2
 		{
 			return;
 		}
-//		for (auto client : clients)
-//		{
-//			reinterpret_cast<CS2Client*>(client)->SendLocoInfo(locoBase);
-//		}
+		for (auto client : clients)
+		{
+			client->SendLocoInfo(locoBase);
+		}
 	}
 
 	void CS2Server::LocoBaseFunction(__attribute__((unused)) const ControlType controlType,
@@ -250,10 +273,10 @@ namespace Server { namespace CS2
 		{
 			return;
 		}
-//		for (auto client : clients)
-//		{
-//			reinterpret_cast<CS2Client*>(client)->SendLocoInfo(locoBase);
-//		}
+		for (auto client : clients)
+		{
+			client->SendLocoInfo(locoBase);
+		}
 	}
 
 	void CS2Server::AccessoryState(__attribute__((unused)) const ControlType controlType,
@@ -280,11 +303,10 @@ namespace Server { namespace CS2
 		{
 			return;
 		}
-//		for (auto client : clients)
-//		{
-//			reinterpret_cast<CS2Client*>(client)->SendTurnoutInfo(accessoryBase);
-//		}
-
+		for (auto client : clients)
+		{
+			client->SendAccessoryInfo(accessoryBase);
+		}
 	}
 
 	void CS2Server::Work(Network::TcpConnection* connection)

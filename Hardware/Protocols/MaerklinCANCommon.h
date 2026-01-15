@@ -122,7 +122,10 @@ namespace Hardware { namespace Protocols
 
 			Logger::Logger* logger;
 
-		private:
+		protected:
+			// Enums and methods needed by derived classes (like CS2Client)
+			typedef unsigned char CanLength;
+
 			enum CanCommand : unsigned char
 			{
 				CanCommandSystem            = 0x00,
@@ -151,6 +154,15 @@ namespace Hardware { namespace Protocols
 				CanResponseResponse = 0x01
 			};
 
+			void CreateCommandHeader(unsigned char* const buffer,
+				const CanCommand command,
+				const CanResponse response,
+				const CanLength length);
+
+			void CreateLocalIDLoco(unsigned char* buffer, const Protocol protocol, const Address address) const;
+			void CreateLocalIDAccessory(unsigned char* buffer, const Protocol protocol, const Address address) const;
+
+		private:
 			enum CanDeviceType : uint16_t
 			{
 				CanDeviceGfp            = 0x0000,
@@ -276,7 +288,6 @@ namespace Hardware { namespace Protocols
 			};
 
 			typedef unsigned char CanPrio;
-			typedef unsigned char CanLength;
 			typedef uint32_t CanUid;
 			typedef uint16_t CanHash;
 			typedef uint16_t CanFileCrc;
@@ -290,11 +301,6 @@ namespace Hardware { namespace Protocols
 				CanFileCrc crc;
 				size_t crcSize;
 			};
-
-			void CreateCommandHeader(unsigned char* const buffer,
-				const CanCommand command,
-				const CanResponse response,
-				const CanLength length);
 
 			inline void ParseAddressProtocol(const unsigned char* const buffer,
 				Address& address,
@@ -405,9 +411,6 @@ namespace Hardware { namespace Protocols
 
 			static CanHash CalcHash(const CanUid uid);
 			void GenerateUidHash();
-
-			void CreateLocalIDLoco(unsigned char* buffer, const Protocol protocol, const Address address) const;
-			void CreateLocalIDAccessory(unsigned char* buffer, const Protocol protocol, const Address address) const;
 
 			void Wait(const unsigned int duration) const;
 			void PingSender();
