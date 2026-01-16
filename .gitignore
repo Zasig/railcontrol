@@ -25,3 +25,5 @@ CMakeCache.txt
 CMakeFiles/*
 cmake_install.cmake
 .idea/
+/.vs
+/cs2CAN-Protokoll-2_0.pdf

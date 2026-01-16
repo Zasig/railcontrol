@@ -206,6 +206,7 @@ namespace Server { namespace Web
 			void PrintMainHTML();
 			void DeliverFile(const std::string& file);
 			void DeliverFileInternal(FILE* f, const char* realFile, const std::string& file);
+			void HandleCs2Config(const std::string& uri);
 			HtmlTag HtmlTagLocoSelector(const std::string& selector, const LocoID locoID = LocoNone) const;
 			HtmlTag HtmlTagLayerSelector(const LayerID layerID = LayerNone) const;
 

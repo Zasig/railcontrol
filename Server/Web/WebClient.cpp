@@ -154,6 +154,17 @@ namespace Server { namespace Web
 			keepalive = (Utils::Utils::GetStringMapEntry(headers, "Connection", "close").compare("keep-alive") == 0);
 			logger->Info(Languages::TextHttpRequest, method, uri);
 
+			// Serve CS2 config files under /config/* (minimal example files for CS2 discovery)
+			if (uri.rfind("/config/", 0) == 0)
+			{
+				HandleCs2Config(uri);
+				if (!keepalive)
+				{
+					return;
+				}
+				continue;
+			}
+
 			// if method is not implemented
 			if ((method.compare("GET") != 0) && (method.compare("HEAD") != 0))
 			{
@@ -804,6 +815,91 @@ namespace Server { namespace Web
 
 		DeliverFileInternal(f, realFile, virtualFile);
 		fclose(f);
+	}
+
+	void WebClient::HandleCs2Config(const string& uri)
+	{
+		// Generate CS2 config files from the RailControl database
+		// These files are used by the Märklin CS2.exe software
+		string path = uri;
+		// strip query
+		auto pos = path.find('?');
+		if (pos != string::npos) path = path.substr(0, pos);
+
+		string body;
+		string contentType = "text/plain";
+
+		if (path == "/config/lokomotive.cs2")
+		{
+			body = manager.GetCs2Lokomotive();
+		}
+		else if (path == "/config/magnetartikel.cs2")
+		{
+			body = manager.GetCs2Magnetartikel();
+		}
+		else if (path == "/config/fahrstrassen.cs2")
+		{
+			// Routes/Fahrstrassen - currently returning empty valid structure
+			body = "[fahrstrassen]\nversion\n .major=0\n .minor=1\n";
+		}
+		else if (path == "/config/gleisbild.cs2")
+		{
+			body = manager.GetCs2GBS();
+		}
+		else if (path.rfind("/config/gleisbilder/", 0) == 0)
+		{
+			// Handle individual track layout pages: /config/gleisbilder/<page>.cs2
+			string pageName = path.substr(20); // Remove "/config/gleisbilder/"
+			// Remove .cs2 extension if present
+			if (pageName.size() > 4 && pageName.substr(pageName.size() - 4) == ".cs2")
+			{
+				pageName = pageName.substr(0, pageName.size() - 4);
+			}
+			// Parse page number, default to layer 1
+			signed char pageNr = LayerUndeletable;
+			try
+			{
+				pageNr = static_cast<signed char>(std::stoi(pageName));
+			}
+			catch (...)
+			{
+				// Keep default
+			}
+			body = manager.GetCs2GBS(pageNr);
+		}
+		else if (path == "/config/geraet.vrs")
+		{
+			// Device information for CS2 discovery
+			// Format according to CS2 protocol specification
+			body = "[geraet]\nversion\n .major=0\n .minor=1\n";
+			body += "geraet\n";
+			body += " .uid=0x52430001\n";  // "RC" + 0001 as unique ID
+			body += " .hardwareversion=1.0\n";
+			body += " .seriennummer=RC000001\n";
+			body += " .artikelnummer=RailControl\n";
+			body += " .produktdatum=2024-01-01\n";
+			body += " .geraettyp=Central Station\n";
+			contentType = "application/octet-stream";
+		}
+		else
+		{
+			ResponseHtmlNotFound response(uri);
+			connection->Send(response);
+			logger->Info(Languages::TextFileNotFound, uri);
+			return;
+		}
+
+		Response response;
+		response.AddHeader("Cache-Control", "no-cache, must-revalidate");
+		response.AddHeader("Pragma", "no-cache");
+		response.AddHeader("Expires", "Sun, 12 Feb 2016 00:00:00 GMT");
+		response.AddHeader("Content-Length", to_string(body.size()));
+		response.AddHeader("Content-Type", contentType);
+		connection->Send(response);
+		if (!headOnly)
+		{
+			connection->Send(body.c_str(), static_cast<int>(body.size()), 0);
+		}
 	}
 
 	void WebClient::DeliverFileInternal(FILE* f, const char* realFile, const string& virtualFile)

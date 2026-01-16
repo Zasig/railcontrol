@@ -4307,7 +4307,9 @@ bool Manager::LocoBaseAddTimeTable(const ObjectIdentifier& locoBaseIdentifier,
 
 string Manager::GetCs2Lokomotive() const
 {
-	string out("[lokomotive]\nversion\n .major=0\n .minor=3\nsession\n .id=");
+	// Format according to CS2 specification (matching can2udp format)
+	// Note: .major is not used, only .minor=3
+	string out("[lokomotive]\nversion\n .minor=3\nsession\n .id=");
 	out += "1"; // FIXME: replace with mfx-neuanmeldezähler
 	{
 		std::lock_guard<std::mutex> guard(locoMutex);
@@ -4315,53 +4317,59 @@ string Manager::GetCs2Lokomotive() const
 		{
 			out += "\nlokomotive";
 			out += "\n .name=" + loco.second->GetName();
-			out += "\n .typ=";
+			out += "\n .uid=0x";
 			const Address address = loco.second->GetAddress();
 			uint32_t uid;
 			switch(loco.second->GetProtocol())
 			{
 				case ProtocolMM:
-					out += "mm2_prog";
 					uid = address;
+					out += Utils::Integer::IntegerToHex(uid);
+					out += "\n .adresse=0x" + Utils::Integer::IntegerToHex(address);
+					out += "\n .typ=mm2_prg";
 					break;
 
 				case ProtocolDCC:
-					out += "dcc";
 					uid = address + 0xC000;
+					out += Utils::Integer::IntegerToHex(uid);
+					out += "\n .adresse=0x" + Utils::Integer::IntegerToHex(address);
+					out += "\n .typ=dcc";
 					break;
 
 				case ProtocolMFX:
-					out += "mfx";
 					uid = address + 0x4000;
+					out += Utils::Integer::IntegerToHex(uid);
+					out += "\n .adresse=0x" + Utils::Integer::IntegerToHex(address);
+					out += "\n .typ=mfx";
 					break;
 
 				default:
-					out += "unknown";
-					uid = 0;
+					uid = address;
+					out += Utils::Integer::IntegerToHex(uid);
+					out += "\n .adresse=0x" + Utils::Integer::IntegerToHex(address);
+					out += "\n .typ=mm2_prg";
 					break;
 			}
-			out += "\n .uid=0x" + Utils::Integer::IntegerToHex(uid);
-			out += "\n .adresse=0x" + Utils::Integer::IntegerToHex(address);
-			out += "\n .icon=";
-			out += "\n .symbol=";
-			out += "\n .av=0";
-			out += "\n .bv=0";
-			out += "\n .velocity=" + to_string(loco.second->GetSpeed());
-			out += "\n .richtung=" + to_string(loco.second->GetOrientation());
+			out += "\n .icon=" + loco.second->GetName();
+			out += "\n .av=15";
+			out += "\n .bv=15";
+			out += "\n .volume=255";
 			out += "\n .tachomax=120";
 			out += "\n .vmax=255";
 			out += "\n .vmin=1";
-			for (LocoFunctionNr nr = 0; nr < 32; ++nr)
+			for (LocoFunctionNr nr = 0; nr < 16; ++nr)
 			{
 				out += "\n .funktionen";
-				if (nr >= 16)
-				{
-					out += "_2";
-				}
 				out += "\n ..nr=" + to_string(nr);
-				out += "\n ..typ=" + to_string(Hardware::Protocols::MaerklinCANCommon::MapLocofunctionRailControlToCs2(nr, loco.second->GetFunctionIcon(nr)));
-				out += "\n ..dauer=" + to_string(loco.second->GetFunctionType(nr));
-				out += "\n ..wert=" + to_string(loco.second->GetFunctionState(nr));;
+				uint8_t typ = Hardware::Protocols::MaerklinCANCommon::MapLocofunctionRailControlToCs2(nr, loco.second->GetFunctionIcon(nr));
+				if (typ != 0)
+				{
+					out += "\n ..typ=" + to_string(typ);
+				}
+				if (loco.second->GetFunctionState(nr))
+				{
+					out += "\n ..wert=1";
+				}
 			}
 		}
 	}
@@ -4477,6 +4485,61 @@ string Manager::GetCs2Magnetartikel() const
 				default:
 					out += "lichtsignal_HP01";
 					break;
+			}
+		}
+	}
+	return out + "\n";
+}
+
+string Manager::GetCs2Fahrstrassen() const
+{
+	string out("[fahrstrassen]\nversion\n .major=0\n .minor=1");
+	{
+		std::lock_guard<std::mutex> guard(routeMutex);
+		for (auto& route : routes)
+		{
+			out += "\nfahrstrasse";
+			out += "\n .name=" + route.second->GetName();
+			out += "\n .id=" + to_string(route.second->GetID());
+
+			// Add switches/accessories that are part of this route (relationsAtLock)
+			const auto& relations = route.second->GetRelationsAtLock();
+			int itemIndex = 0;
+			for (const auto& relation : relations)
+			{
+				ObjectType objectType = relation->ObjectType2();
+				ObjectID objectId = relation->ObjectID2();
+				DataModel::AccessoryState state = static_cast<DataModel::AccessoryState>(relation->GetData());
+
+				// Only include switches and signals
+				if (objectType == ObjectTypeSwitch || objectType == ObjectTypeSignal)
+				{
+					Address address = 0;
+					if (objectType == ObjectTypeSwitch)
+					{
+						const DataModel::Switch* sw = GetSwitch(static_cast<SwitchID>(objectId));
+						if (sw)
+						{
+							address = sw->GetAddress();
+						}
+					}
+					else if (objectType == ObjectTypeSignal)
+					{
+						const DataModel::Signal* sig = GetSignal(static_cast<SignalID>(objectId));
+						if (sig)
+						{
+							address = sig->GetAddress();
+						}
+					}
+
+					if (address > 0)
+					{
+						out += "\n .item";
+						out += "\n ..id=" + to_string(itemIndex++);
+						out += "\n ..magnetartikel=" + to_string(address);
+						out += "\n ..stellung=" + to_string(state);
+					}
+				}
 			}
 		}
 	}

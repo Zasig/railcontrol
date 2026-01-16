@@ -1,0 +1,17 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "cppgdb",
+      "name": "railcontrol (Linux)",
+      "project": "CMakeLists.txt",
+      "projectTarget": "railcontrol",
+      "debuggerConfiguration": "gdb",
+      "MIMode": "gdb",
+      "args": [],
+      "env": {},
+      "cwd": "$HOME/railcontrol"
+    }
+  ]
+}

@@ -200,6 +200,8 @@ RailControl.cpp
 RailControl.h
 Server/CS2/CS2Client.cpp
 Server/CS2/CS2Client.h
+Server/CS2/CS2HttpServer.cpp
+Server/CS2/CS2HttpServer.h
 Server/CS2/CS2Server.cpp
 Server/CS2/CS2Server.h
 Server/Web/HtmlTag.cpp

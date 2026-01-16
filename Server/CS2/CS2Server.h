@@ -32,6 +32,7 @@ along with RailControl; see the file LICENCE. If not see
 #include "Logger/Logger.h"
 #include "Manager.h"
 #include "Network/UdpServer.h"
+#include "Server/CS2/CS2HttpServer.h"
 
 namespace Server { namespace CS2
 {
@@ -91,7 +92,13 @@ namespace Server { namespace CS2
 
 			bool runUdp;
 			std::thread udpServerThread;
+			std::thread udpBroadcastThread;
 			int udpServerSocket;
+			int udpBroadcastSocket;
+
+			CS2HttpServer* httpServer;
+
+			static const uint32_t ServerUid = 0x52430001; // "RC" + 0001
 
 			void AccessoryBaseState(const DataModel::AccessoryBase* accessoryBase);
 
@@ -104,5 +111,9 @@ namespace Server { namespace CS2
 			void UdpSocketCreateBindListen(int family, struct sockaddr* address);
 
 			void UdpWorker();
+
+			void UdpBroadcastWorker();
+
+			void SendPingBroadcast();
 	};
 }} // namespace Server::CS2

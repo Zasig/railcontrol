@@ -623,6 +623,19 @@ namespace Hardware { namespace Protocols
 			const string dataPlain = manager->GetCs2Lokomotive();
 			SendCompressedFile(dataPlain, buffer + 5);
 		}
+		else if ((buffer[5] == 'l')
+			&& (buffer[6] == 'o')
+			&& (buffer[7] == 'k')
+			&& (buffer[8] == 's')
+			&& (buffer[9] == 't')
+			&& (buffer[10] == 'a')
+			&& (buffer[11] == 't')
+			&& (buffer[12] == 0x00))
+		{
+			// Locomotive status file
+			const string dataPlain = "[lokstatus]\nversion\n .minor=1\n";
+			SendCompressedFile(dataPlain, buffer + 5);
+		}
 		else if ((buffer[5] == 'm')
 			&& (buffer[6] == 'a')
 			&& (buffer[7] == 'g')
@@ -633,6 +646,19 @@ namespace Hardware { namespace Protocols
 			&& (buffer[12] == 0x00))
 		{
 			const string dataPlain = manager->GetCs2Magnetartikel();
+			SendCompressedFile(dataPlain, buffer + 5);
+		}
+		else if ((buffer[5] == 'm')
+			&& (buffer[6] == 'a')
+			&& (buffer[7] == 'g')
+			&& (buffer[8] == 's')
+			&& (buffer[9] == 't')
+			&& (buffer[10] == 'a')
+			&& (buffer[11] == 't')
+			&& (buffer[12] == 0x00))
+		{
+			// Accessory status file
+			const string dataPlain = "[magnetartikel]\nversion\n .minor=1\n";
 			SendCompressedFile(dataPlain, buffer + 5);
 		}
 		else if ((buffer[5] == 'g')
@@ -655,6 +681,15 @@ namespace Hardware { namespace Protocols
 				const string dataPlain = manager->GetCs2GBS(gbs);
 				SendCompressedFile(dataPlain, buffer + 5);
 			}
+			else if ((buffer[8] == 's')
+				&& (buffer[9] == 't')
+				&& (buffer[10] == 'a')
+				&& (buffer[11] == 't'))
+			{
+				// Track layout status file
+				const string dataPlain = "[gleisbild]\nversion\n .minor=1\n";
+				SendCompressedFile(dataPlain, buffer + 5);
+			}
 		}
 		else if ((buffer[5] == 'f')
 			&& (buffer[6] == 's')
@@ -665,8 +700,7 @@ namespace Hardware { namespace Protocols
 			&& (buffer[11] == 0x00)
 			&& (buffer[12] == 0x00))
 		{
-			// we send an empty configuration
-			const string dataPlain = "[fahrstrassen]\nversion\n .minor=4\n";
+			const string dataPlain = manager->GetCs2Fahrstrassen();
 			SendCompressedFile(dataPlain, buffer + 5);
 		}
 	}

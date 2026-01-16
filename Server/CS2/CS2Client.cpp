@@ -141,6 +141,19 @@ namespace Server { namespace CS2
 			logger->HexOut(buffer, CANCommandBufferLength);
 			Send(buffer);
 		}
+
+		// Send function states
+		std::vector<DataModel::LocoFunctionEntry> functions = loco->GetFunctionStates();
+		for (const DataModel::LocoFunctionEntry& function : functions)
+		{
+			unsigned char buffer[CANCommandBufferLength];
+			CreateCommandHeader(buffer, CanCommandLocoFunction, CanResponseResponse, 6);
+			CreateLocalIDLoco(buffer, protocol, address);
+			buffer[9] = function.nr;
+			buffer[10] = function.state;
+			logger->HexOut(buffer, CANCommandBufferLength);
+			Send(buffer);
+		}
 	}
 
 	void CS2Client::SendAccessoryInfo(const DataModel::AccessoryBase* accessory)
