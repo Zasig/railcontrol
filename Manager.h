@@ -102,6 +102,9 @@ class Manager
 
 		DataModel::Loco* GetLoco(const LocoID locoID) const;
 
+		// Get loco by protocol and address (without controlID)
+		DataModel::Loco* GetLoco(const Protocol protocol, const Address address) const;
+
 		DataModel::LocoConfig GetLocoOfConfigByMatchKey(const ControlID controlId, const std::string& matchKey) const;
 
 		DataModel::Loco* GetLocoByMatchKey(const ControlID controlId, const std::string& matchKey) const;
@@ -168,6 +171,16 @@ class Manager
 			LocoBaseSpeed(controlType, GetLoco(controlID, protocol, address), speed);
 		}
 
+		// LocoSpeed without controlID - finds loco by protocol and address only
+		inline void LocoSpeed(const ControlType controlType,
+			const Protocol protocol,
+			const Address address,
+			const Speed speed)
+		{
+			// nullptr check of loco is done within submethod
+			LocoBaseSpeed(controlType, GetLoco(protocol, address), speed);
+		}
+
 		inline bool LocoBaseSpeed(const ControlType controlType,
 			const DataModel::ObjectIdentifier& locoBaseIdentifier,
 			const Speed speed)
@@ -192,6 +205,16 @@ class Manager
 			LocoBaseOrientation(controlType, GetLoco(controlID, protocol, address), orientation);
 		}
 
+		// LocoOrientation without controlID - finds loco by protocol and address only
+		inline void LocoOrientation(const ControlType controlType,
+			const Protocol protocol,
+			const Address address,
+			const Orientation orientation)
+		{
+			// nullptr check of loco is done within submethod
+			LocoBaseOrientation(controlType, GetLoco(protocol, address), orientation);
+		}
+
 		inline void LocoBaseOrientation(const ControlType controlType,
 			const DataModel::ObjectIdentifier& locoBaseIdentifier,
 			const Orientation orientation)
@@ -199,6 +222,7 @@ class Manager
 			// nullptr check of loco is done within submethod
 			LocoBaseOrientation(controlType, GetLocoBase(locoBaseIdentifier), orientation);
 		}
+
 
 		void LocoBaseOrientation(const ControlType controlType,
 			DataModel::LocoBase* loco,
@@ -213,6 +237,17 @@ class Manager
 		{
 			// nullptr check of loco is done within submethod
 			LocoBaseFunctionState(controlType, GetLoco(controlID, protocol, address), function, on);
+		}
+
+		// LocoFunctionState without controlID - finds loco by protocol and address only
+		void LocoFunctionState(const ControlType controlType,
+			const Protocol protocol,
+			const Address address,
+			const DataModel::LocoFunctionNr function,
+			const DataModel::LocoFunctionState on)
+		{
+			// nullptr check of loco is done within submethod
+			LocoBaseFunctionState(controlType, GetLoco(protocol, address), function, on);
 		}
 
 		void LocoBaseFunctionState(const ControlType controlType,

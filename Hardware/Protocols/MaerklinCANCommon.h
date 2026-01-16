@@ -373,6 +373,10 @@ namespace Hardware { namespace Protocols
 			}
 
 			void ParseCommandSystem(const unsigned char* const buffer);
+			void ParseCommandLocoSpeed(const unsigned char* const buffer);
+			void ParseCommandLocoDirection(const unsigned char* const buffer);
+			void ParseCommandLocoFunction(const unsigned char* const buffer);
+			void ParseCommandAccessory(const unsigned char* const buffer);
 			void ParseResponseLocoSpeed(const unsigned char* const buffer);
 			void ParseResponseLocoDirection(const unsigned char* const buffer);
 			void ParseResponseLocoFunction(const unsigned char* const buffer);

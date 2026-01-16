@@ -739,6 +739,20 @@ Loco* Manager::GetLoco(const ControlID controlID, const Protocol protocol, const
 	return nullptr;
 }
 
+Loco* Manager::GetLoco(const Protocol protocol, const Address address) const
+{
+	std::lock_guard<std::mutex> guard(locoMutex);
+	for (auto& loco : locos)
+	{
+		if (loco.second->GetProtocol() == protocol
+			&& loco.second->GetAddress() == address)
+		{
+			return loco.second;
+		}
+	}
+	return nullptr;
+}
+
 const map<string,LocoID> Manager::LocoBaseListFree() const
 {
 	map<string,LocoID> out;

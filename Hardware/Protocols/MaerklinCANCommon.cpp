@@ -488,6 +488,22 @@ namespace Hardware { namespace Protocols
 				ParseCommandSystem(buffer);
 				return;
 
+			case CanCommandLocoSpeed:
+				ParseCommandLocoSpeed(buffer);
+				return;
+
+			case CanCommandLocoDirection:
+				ParseCommandLocoDirection(buffer);
+				return;
+
+			case CanCommandLocoFunction:
+				ParseCommandLocoFunction(buffer);
+				return;
+
+			case CanCommandAccessory:
+				ParseCommandAccessory(buffer);
+				return;
+
 			case CanCommandRequestConfigData:
 				ParseCommandRequestConfigData(buffer);
 				return;
@@ -524,6 +540,75 @@ namespace Hardware { namespace Protocols
 				manager->Booster(ControlTypeHardware, BoosterStateGo);
 				return;
 		}
+	}
+
+
+	void MaerklinCANCommon::ParseCommandLocoSpeed(const unsigned char* const buffer)
+	{
+		if (ParseLength(buffer) != 6)
+		{
+			return;
+		}
+		Address address;
+		Protocol protocol;
+		LocoType type;
+		ParseAddressProtocol(buffer, address, protocol, type);
+		Speed speed = Utils::Integer::DataBigEndianToShort(buffer + 9);
+		logger->Info(Languages::TextReceivedSpeedCommand, Utils::Utils::ProtocolToString(protocol), address, speed);
+		// Use the overload without controlID to find loco by protocol/address only
+		manager->LocoSpeed(ControlTypeHardware, protocol, address, speed);
+	}
+
+	void MaerklinCANCommon::ParseCommandLocoDirection(const unsigned char* const buffer)
+	{
+		if (ParseLength(buffer) != 5)
+		{
+			return;
+		}
+		Address address;
+		Protocol protocol;
+		LocoType type;
+		ParseAddressProtocol(buffer, address, protocol, type);
+		Orientation orientation = (buffer[9] == 1 ? OrientationRight : OrientationLeft);
+		logger->Info(Languages::TextReceivedDirectionCommand, Utils::Utils::ProtocolToString(protocol), address, orientation);
+		// changing direction implies speed = 0
+		// Use the overload without controlID to find loco by protocol/address only
+		manager->LocoSpeed(ControlTypeHardware, protocol, address, MinSpeed);
+		manager->LocoOrientation(ControlTypeHardware, protocol, address, orientation);
+	}
+
+	void MaerklinCANCommon::ParseCommandLocoFunction(const unsigned char* const buffer)
+	{
+		if (ParseLength(buffer) != 6)
+		{
+			return;
+		}
+		Address address;
+		Protocol protocol;
+		LocoType type;
+		ParseAddressProtocol(buffer, address, protocol, type);
+		DataModel::LocoFunctionNr function = buffer[9];
+		DataModel::LocoFunctionState on = (buffer[10] != 0 ? DataModel::LocoFunctionStateOn : DataModel::LocoFunctionStateOff);
+		logger->Info(Languages::TextReceivedFunctionCommand, Utils::Utils::ProtocolToString(protocol), address, function, on);
+		// Use the overload without controlID to find loco by protocol/address only
+		manager->LocoFunctionState(ControlTypeHardware, protocol, address, function, on);
+	}
+
+	void MaerklinCANCommon::ParseCommandAccessory(const unsigned char* const buffer)
+	{
+		if (ParseLength(buffer) != 6)
+		{
+			return;
+		}
+		Address address;
+		Protocol protocol;
+		LocoType type;
+		ParseAddressProtocol(buffer, address, protocol, type);
+		DataModel::AccessoryState state = (buffer[9] ? DataModel::AccessoryStateOn : DataModel::AccessoryStateOff);
+		// GUI-address is 1-based, protocol-address is 0-based
+		++address;
+		logger->Info(Languages::TextReceivedAccessoryCommand, Utils::Utils::ProtocolToString(protocol), address, state);
+		manager->AccessoryBaseState(ControlTypeHardware, controlID, protocol, address, state);
 	}
 
 	void MaerklinCANCommon::ParseResponseLocoSpeed(const unsigned char* const buffer)
