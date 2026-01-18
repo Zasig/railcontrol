@@ -343,9 +343,18 @@ class Manager
 			const Address address,
 			const DataModel::AccessoryState state);
 
+
+		// AccessoryBaseState without controlID - finds accessory/switch/signal by protocol and address only
+		void AccessoryBaseState(const ControlType controlType,
+			const Protocol protocol,
+			const Address address,
+			const DataModel::AccessoryState state,
+			const bool skipInversion = false);
+
 		void AccessoryBaseState(const ControlType controlType,
 			const DataModel::ObjectIdentifier& identifier,
 			const DataModel::AccessoryState state);
+
 
 		// accessory
 		bool AccessoryState(const ControlType controlType, const AccessoryID accessoryID, const DataModel::AccessoryState state, const bool force = false);
@@ -750,7 +759,6 @@ class Manager
 			const bool automode);
 
 		std::string GetCs2Lokomotive() const;
-		static std::string GetCs2Magnetartikel(const DataModel::AccessoryBase* base);
 		std::string GetCs2Magnetartikel() const;
 		std::string GetCs2Fahrstrassen() const;
 		std::string GetCs2GBS() const;

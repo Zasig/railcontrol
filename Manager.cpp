@@ -1247,25 +1247,127 @@ void Manager::AccessoryBaseState(const ControlType controlType,
 	Accessory* accessory = GetAccessory(controlID, protocol, address, static_cast<AddressPort>(state));
 	if (accessory)
 	{
-		AccessoryState(controlType, accessory, accessory->CalculateInvertedAccessoryState(state), true);
+		DataModel::AccessoryState finalState = accessory->CalculateInvertedAccessoryState(state);
+		
+		// Check if state is already correct to avoid echo/double-switching
+		if (accessory->GetAccessoryState() == finalState)
+		{
+			logger->Debug("Accessory {0} already in state {1}, ignoring", accessory->GetName(), static_cast<int>(finalState));
+			return;
+		}
+		
+		AccessoryState(controlType, accessory, finalState, true);
 		return;
 	}
 
 	Switch* mySwitch = GetSwitch(controlID, protocol, address);
 	if (mySwitch)
 	{
-		SwitchState(controlType, mySwitch, mySwitch->CalculateInvertedSwitchState(address, state), true);
+		DataModel::AccessoryState calculatedState = mySwitch->CalculateInvertedSwitchState(address, state);
+		
+		// Check if state is already correct to avoid echo/double-switching
+		if (mySwitch->GetAccessoryState() == calculatedState)
+		{
+			logger->Debug("Switch {0} already in state {1}, ignoring", mySwitch->GetName(), static_cast<int>(calculatedState));
+			return;
+		}
+		
+		SwitchState(controlType, mySwitch, calculatedState, true);
 		return;
 	}
 
 	Signal* signal = GetSignal(controlID, protocol, address);
 	if (signal)
 	{
-		SignalState(controlType, signal, signal->CalculateMappedSignalState(address, state), true);
+		DataModel::AccessoryState finalState = signal->CalculateMappedSignalState(address, state);
+		
+		// Check if state is already correct to avoid echo/double-switching
+		if (signal->GetAccessoryState() == finalState)
+		{
+			logger->Debug("Signal {0} already in state {1}, ignoring", signal->GetName(), static_cast<int>(finalState));
+			return;
+		}
+		
+		SignalState(controlType, signal, finalState, true);
 		return;
 	}
 
 	logger->Warning(Languages::TextAccessoryControlProtocolAddressDoesNotExist, controlID, Utils::Utils::ProtocolToString(protocol), address);
+}
+
+void Manager::AccessoryBaseState(const ControlType controlType,
+	const Protocol protocol,
+	const Address address,
+	const DataModel::AccessoryState state,
+	const bool skipInversion)
+{
+	// Find accessory by protocol and address only (no controlID)
+	Accessory* accessory = nullptr;
+	{
+		std::lock_guard<std::mutex> guard(accessoryMutex);
+		for (auto& a : accessories)
+		{
+			if ((a.second->GetProtocol() == protocol) && (a.second->GetAddress() == address))
+			{
+				accessory = a.second;
+				break;
+			}
+		}
+	}
+	if (accessory)
+	{
+		DataModel::AccessoryState finalState = skipInversion ? state : accessory->CalculateInvertedAccessoryState(state);
+		logger->Debug("Accessory found: {0}, input state={1}, calculated state={2}, skipInversion={3}", accessory->GetName(), static_cast<int>(state), static_cast<int>(finalState), skipInversion);
+		// Always execute commands from CS2 (do not ignore identical states coming from CS2)
+		AccessoryState(controlType, accessory, finalState, true);
+		return;
+	}
+
+	// Find switch by protocol and address only
+	Switch* mySwitch = nullptr;
+	{
+		std::lock_guard<std::mutex> guard(switchMutex);
+		for (auto& s : switches)
+		{
+			if ((s.second->GetProtocol() == protocol) && (s.second->UsesAddress(address)))
+			{
+				mySwitch = s.second;
+				break;
+			}
+		}
+	}
+	if (mySwitch)
+	{
+		DataModel::AccessoryState calculatedState = skipInversion ? state : mySwitch->CalculateInvertedSwitchState(address, state);
+		logger->Debug("Switch found: {0}, input state={1}, calculated state={2}, skipInversion={3}", mySwitch->GetName(), static_cast<int>(state), static_cast<int>(calculatedState), skipInversion);
+		// Always execute commands from CS2 (do not ignore identical states coming from CS2)
+		SwitchState(controlType, mySwitch, calculatedState, true);
+		return;
+	}
+
+	// Find signal by protocol and address only
+	Signal* signal = nullptr;
+	{
+		std::lock_guard<std::mutex> guard(signalMutex);
+		for (auto& sig : signals)
+		{
+			if ((sig.second->GetProtocol() == protocol) && (sig.second->UsesAddress(address)))
+			{
+				signal = sig.second;
+				break;
+			}
+		}
+	}
+	if (signal)
+	{
+		DataModel::AccessoryState finalState = skipInversion ? state : signal->CalculateMappedSignalState(address, state);
+		logger->Debug("Signal found: {0}, input state={1}, calculated state={2}, skipInversion={3}", signal->GetName(), static_cast<int>(state), static_cast<int>(finalState), skipInversion);
+		// Always execute commands from CS2 (do not ignore identical states coming from CS2)
+		SignalState(controlType, signal, finalState, true);
+		return;
+	}
+
+	logger->Warning(Languages::TextAccessoryControlProtocolAddressDoesNotExist, ControlIdNone, Utils::Utils::ProtocolToString(protocol), address);
 }
 
 void Manager::AccessoryBaseState(const ControlType controlType,
@@ -4376,6 +4478,11 @@ string Manager::GetCs2Lokomotive() const
 				out += "\n .funktionen";
 				out += "\n ..nr=" + to_string(nr);
 				uint8_t typ = Hardware::Protocols::MaerklinCANCommon::MapLocofunctionRailControlToCs2(nr, loco.second->GetFunctionIcon(nr));
+				DataModel::LocoFunctionType functionType = loco.second->GetFunctionType(nr);
+				if (functionType == DataModel::LocoFunctionTypeMoment)
+				{
+					typ |= 0x80; // Set bit 7 for moment function
+				}
 				if (typ != 0)
 				{
 					out += "\n ..typ=" + to_string(typ);
@@ -4390,57 +4497,30 @@ string Manager::GetCs2Lokomotive() const
 	return out + "\n";
 }
 
-string Manager::GetCs2Magnetartikel(const AccessoryBase* accessoryBase)
-{
-	string out = "\nartikel";
-	out += "\n .id=" + to_string(accessoryBase->GetAddress());
-	out += "\n .name=";
-	const Object* object = dynamic_cast<const Object*>(accessoryBase);
-	if (object)
-	{
-		out += object->GetName();
-	}
-	else
-	{
-		out += to_string(accessoryBase->GetAddress());
-	}
-
-	out += "\n .typ=std_rot_gruen";
-	out += "\n .schaltzeit=" + to_string(accessoryBase->GetAccessoryPulseDuration());
-	out += "\n .dectyp=";
-	switch(accessoryBase->GetProtocol())
-	{
-		case ProtocolMM:
-			out += "mm2";
-			break;
-
-		case ProtocolDCC:
-			out += "dcc";
-			break;
-
-		default:
-			out += "unknown";
-			break;
-	}
-	return out + "\n";
-}
-
 string Manager::GetCs2Magnetartikel() const
 {
-	string out("[magnetartikel]\nversion\n. major=0\n. minor=1");
+	string out("[magnetartikel]\nversion\n .minor=1");
 	{
 		std::lock_guard<std::mutex> guard(accessoryMutex);
 		for (auto& accessory : accessories)
 		{
-			out += GetCs2Magnetartikel(accessory.second);
+			out += "\nartikel";
+			out += "\n .id=" + to_string(accessory.second->GetAddress());
+			out += "\n .name=" + accessory.second->GetName();
 			out += "\n .typ=std_rot_gruen";
+            out += "\n .stellung=" + to_string(accessory.second->GetAccessoryState());
+			out += "\n .schaltzeit=" + to_string(accessory.second->GetAccessoryPulseDuration());
+            out += "\n .decoder=ein_neu";
+			out += "\n .dectyp=" + string(accessory.second->GetProtocol() == ProtocolDCC ? "dcc" : "mm2");
 		}
 	}
 	{
 		std::lock_guard<std::mutex> guard(switchMutex);
 		for (auto& mySwitch : switches)
 		{
-			out += GetCs2Magnetartikel(mySwitch.second);
+			out += "\nartikel";
+			out += "\n .id=" + to_string(mySwitch.second->GetAddress());
+			out += "\n .name=" + mySwitch.second->GetName();
 			out += "\n .typ=";
 			switch (mySwitch.second->GetAccessoryType())
 			{
@@ -4462,16 +4542,22 @@ string Manager::GetCs2Magnetartikel() const
 					break;
 
 				default:
-					out += "y_weiche";
+					out += "rechtsweiche";
 					break;
 			}
+            out += "\n .stellung=" + to_string(mySwitch.second->GetAccessoryState());
+			out += "\n .schaltzeit=" + to_string(mySwitch.second->GetAccessoryPulseDuration());
+            out += "\n .decoder=ein_neu";
+			out += "\n .dectyp=" + string(mySwitch.second->GetProtocol() == ProtocolDCC ? "dcc" : "mm2");
 		}
 	}
 	{
 		std::lock_guard<std::mutex> guard(signalMutex);
 		for (auto& signal : signals)
 		{
-			out += GetCs2Magnetartikel(signal.second);
+			out += "\nartikel";
+			out += "\n .id=" + to_string(signal.second->GetAddress());
+			out += "\n .name=" + signal.second->GetName();
 			out += "\n .typ=";
 			switch (signal.second->GetAccessoryType())
 			{
@@ -4500,6 +4586,10 @@ string Manager::GetCs2Magnetartikel() const
 					out += "lichtsignal_HP01";
 					break;
 			}
+            out += "\n .stellung=" + to_string(signal.second->GetAccessoryState());
+			out += "\n .schaltzeit=" + to_string(signal.second->GetAccessoryPulseDuration());
+            out += "\n .decoder=ein_neu";
+			out += "\n .dectyp=" + string(signal.second->GetProtocol() == ProtocolDCC ? "dcc" : "mm2");
 		}
 	}
 	return out + "\n";

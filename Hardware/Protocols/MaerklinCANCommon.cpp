@@ -488,22 +488,6 @@ namespace Hardware { namespace Protocols
 				ParseCommandSystem(buffer);
 				return;
 
-			case CanCommandLocoSpeed:
-				ParseCommandLocoSpeed(buffer);
-				return;
-
-			case CanCommandLocoDirection:
-				ParseCommandLocoDirection(buffer);
-				return;
-
-			case CanCommandLocoFunction:
-				ParseCommandLocoFunction(buffer);
-				return;
-
-			case CanCommandAccessory:
-				ParseCommandAccessory(buffer);
-				return;
-
 			case CanCommandRequestConfigData:
 				ParseCommandRequestConfigData(buffer);
 				return;
@@ -514,6 +498,34 @@ namespace Hardware { namespace Protocols
 
 			case CanCommandPing:
 				ParseCommandPing(buffer);
+				return;
+
+			case CanCommandAccessory:
+				if (isCs2Main)
+				{
+					ParseCommandAccessory(buffer);
+				}
+				return;
+
+			case CanCommandLocoSpeed:
+				if (isCs2Main)
+				{
+					ParseCommandLocoSpeed(buffer);
+				}
+				return;
+
+			case CanCommandLocoDirection:
+				if (isCs2Main)
+				{
+					ParseCommandLocoDirection(buffer);
+				}
+				return;
+
+			case CanCommandLocoFunction:
+				if (isCs2Main)
+				{
+					ParseCommandLocoFunction(buffer);
+				}
 				return;
 
 			default:
@@ -527,21 +539,21 @@ namespace Hardware { namespace Protocols
 		{
 			return;
 		}
-		CanSubCommand subcmd = ParseSubCommand(buffer);
+	CanSubCommand subcmd = ParseSubCommand(buffer);
+		const ControlType controlType = isCs2Main ? ControlTypeInternal : ControlTypeHardware;
 		switch (subcmd)
 		{
 			case CanSubCommandStop:
 				// system stop
-				manager->Booster(ControlTypeHardware, BoosterStateStop);
+				manager->Booster(controlType, BoosterStateStop);
 				return;
 
 			case CanSubCommandGo:
 				// system go
-				manager->Booster(ControlTypeHardware, BoosterStateGo);
+				manager->Booster(controlType, BoosterStateGo);
 				return;
 		}
 	}
-
 
 	void MaerklinCANCommon::ParseCommandLocoSpeed(const unsigned char* const buffer)
 	{
@@ -555,8 +567,7 @@ namespace Hardware { namespace Protocols
 		ParseAddressProtocol(buffer, address, protocol, type);
 		Speed speed = Utils::Integer::DataBigEndianToShort(buffer + 9);
 		logger->Info(Languages::TextReceivedSpeedCommand, Utils::Utils::ProtocolToString(protocol), address, speed);
-		// Use the overload without controlID to find loco by protocol/address only
-		manager->LocoSpeed(ControlTypeHardware, protocol, address, speed);
+		manager->LocoSpeed(ControlTypeInternal, protocol, address, speed);
 	}
 
 	void MaerklinCANCommon::ParseCommandLocoDirection(const unsigned char* const buffer)
@@ -571,10 +582,8 @@ namespace Hardware { namespace Protocols
 		ParseAddressProtocol(buffer, address, protocol, type);
 		Orientation orientation = (buffer[9] == 1 ? OrientationRight : OrientationLeft);
 		logger->Info(Languages::TextReceivedDirectionCommand, Utils::Utils::ProtocolToString(protocol), address, orientation);
-		// changing direction implies speed = 0
-		// Use the overload without controlID to find loco by protocol/address only
-		manager->LocoSpeed(ControlTypeHardware, protocol, address, MinSpeed);
-		manager->LocoOrientation(ControlTypeHardware, protocol, address, orientation);
+		manager->LocoSpeed(ControlTypeInternal, protocol, address, MinSpeed);
+		manager->LocoOrientation(ControlTypeInternal, protocol, address, orientation);
 	}
 
 	void MaerklinCANCommon::ParseCommandLocoFunction(const unsigned char* const buffer)
@@ -590,8 +599,7 @@ namespace Hardware { namespace Protocols
 		DataModel::LocoFunctionNr function = buffer[9];
 		DataModel::LocoFunctionState on = (buffer[10] != 0 ? DataModel::LocoFunctionStateOn : DataModel::LocoFunctionStateOff);
 		logger->Info(Languages::TextReceivedFunctionCommand, Utils::Utils::ProtocolToString(protocol), address, function, on);
-		// Use the overload without controlID to find loco by protocol/address only
-		manager->LocoFunctionState(ControlTypeHardware, protocol, address, function, on);
+		manager->LocoFunctionState(ControlTypeInternal, protocol, address, function, on);
 	}
 
 	void MaerklinCANCommon::ParseCommandAccessory(const unsigned char* const buffer)
@@ -604,11 +612,17 @@ namespace Hardware { namespace Protocols
 		Protocol protocol;
 		LocoType type;
 		ParseAddressProtocol(buffer, address, protocol, type);
+
+		// Log raw local ID sent by CS2 (bytes 5..8) for debugging
+		uint32_t localIdRaw = Utils::Integer::DataBigEndianToInt(buffer + 5);
+		logger->Debug("Accessory command raw localID=0x{0}, buffer5..8={1:02x} {2:02x} {3:02x} {4:02x}",
+			Utils::Integer::IntegerToHex(localIdRaw), buffer[5], buffer[6], buffer[7], buffer[8]);
 		DataModel::AccessoryState state = (buffer[9] ? DataModel::AccessoryStateOn : DataModel::AccessoryStateOff);
-		// GUI-address is 1-based, protocol-address is 0-based
 		++address;
 		logger->Info(Languages::TextReceivedAccessoryCommand, Utils::Utils::ProtocolToString(protocol), address, state);
-		manager->AccessoryBaseState(ControlTypeHardware, controlID, protocol, address, state);
+		logger->Debug("Accessory raw: buffer[9]={0}, buffer[10]={1}, address after increment={2}, protocol={3}", buffer[9], buffer[10], address, Utils::Utils::ProtocolToString(protocol));
+		// Use skipInversion=true because cs2.exe sends the logical state as the user sees it
+		manager->AccessoryBaseState(ControlTypeInternal, protocol, address, state, true);
 	}
 
 	void MaerklinCANCommon::ParseResponseLocoSpeed(const unsigned char* const buffer)
@@ -696,56 +710,32 @@ namespace Hardware { namespace Protocols
 
 	void MaerklinCANCommon::ParseCommandRequestConfigData(const unsigned char* const buffer)
 	{
-		if ((buffer[5] == 'l')
-			&& (buffer[6] == 'o')
-			&& (buffer[7] == 'k')
-			&& (buffer[8] == 's')
-			&& (buffer[9] == 0x00)
-			&& (buffer[10] == 0x00)
-			&& (buffer[11] == 0x00)
-			&& (buffer[12] == 0x00))
-		{
-			const string dataPlain = manager->GetCs2Lokomotive();
-			SendCompressedFile(dataPlain, buffer + 5);
-		}
-		else if ((buffer[5] == 'l')
-			&& (buffer[6] == 'o')
-			&& (buffer[7] == 'k')
-			&& (buffer[8] == 's')
-			&& (buffer[9] == 't')
-			&& (buffer[10] == 'a')
-			&& (buffer[11] == 't')
-			&& (buffer[12] == 0x00))
-		{
-			// Locomotive status file
-			const string dataPlain = "[lokstatus]\nversion\n .minor=1\n";
-			SendCompressedFile(dataPlain, buffer + 5);
-		}
-		else if ((buffer[5] == 'm')
-			&& (buffer[6] == 'a')
-			&& (buffer[7] == 'g')
-			&& (buffer[8] == 's')
-			&& (buffer[9] == 0x00)
-			&& (buffer[10] == 0x00)
-			&& (buffer[11] == 0x00)
-			&& (buffer[12] == 0x00))
-		{
-			const string dataPlain = manager->GetCs2Magnetartikel();
-			SendCompressedFile(dataPlain, buffer + 5);
-		}
-		else if ((buffer[5] == 'm')
-			&& (buffer[6] == 'a')
-			&& (buffer[7] == 'g')
-			&& (buffer[8] == 's')
-			&& (buffer[9] == 't')
-			&& (buffer[10] == 'a')
-			&& (buffer[11] == 't')
-			&& (buffer[12] == 0x00))
-		{
-			// Accessory status file
-			const string dataPlain = "[magnetartikel]\nversion\n .minor=1\n";
-			SendCompressedFile(dataPlain, buffer + 5);
-		}
+        if ((buffer[5] == 'l')
+            && (buffer[6] == 'o')
+            && (buffer[7] == 'k')
+            && (buffer[8] == 's')
+            && (buffer[9] == 0x00)
+            && (buffer[10] == 0x00)
+            && (buffer[11] == 0x00)
+            && (buffer[12] == 0x00))
+        {
+            logger->Debug("Received config request: loks");
+            const string dataPlain = manager->GetCs2Lokomotive();
+            SendCompressedFile(dataPlain, buffer + 5);
+        }
+        else if ((buffer[5] == 'm')
+            && (buffer[6] == 'a')
+            && (buffer[7] == 'g')
+            && (buffer[8] == 's')
+            && (buffer[9] == 0x00)
+            && (buffer[10] == 0x00)
+            && (buffer[11] == 0x00)
+            && (buffer[12] == 0x00))
+        {
+            logger->Debug("Received config request: mags");
+            const string dataPlain = manager->GetCs2Magnetartikel();
+            SendCompressedFile(dataPlain, buffer + 5);
+        }
 		else if ((buffer[5] == 'g')
 			&& (buffer[6] == 'b')
 			&& (buffer[7] == 's')
@@ -766,15 +756,6 @@ namespace Hardware { namespace Protocols
 				const string dataPlain = manager->GetCs2GBS(gbs);
 				SendCompressedFile(dataPlain, buffer + 5);
 			}
-			else if ((buffer[8] == 's')
-				&& (buffer[9] == 't')
-				&& (buffer[10] == 'a')
-				&& (buffer[11] == 't'))
-			{
-				// Track layout status file
-				const string dataPlain = "[gleisbild]\nversion\n .minor=1\n";
-				SendCompressedFile(dataPlain, buffer + 5);
-			}
 		}
 		else if ((buffer[5] == 'f')
 			&& (buffer[6] == 's')
@@ -785,7 +766,8 @@ namespace Hardware { namespace Protocols
 			&& (buffer[11] == 0x00)
 			&& (buffer[12] == 0x00))
 		{
-			const string dataPlain = manager->GetCs2Fahrstrassen();
+			// we send an empty configuration
+			const string dataPlain = "[fahrstrassen]\nversion\n .minor=4\n";
 			SendCompressedFile(dataPlain, buffer + 5);
 		}
 	}
