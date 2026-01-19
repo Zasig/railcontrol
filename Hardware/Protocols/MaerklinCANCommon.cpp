@@ -608,19 +608,50 @@ namespace Hardware { namespace Protocols
 		{
 			return;
 		}
+
+		// Log raw CAN frame for debugging
+		uint32_t localIdRaw = Utils::Integer::DataBigEndianToInt(buffer + 5);
+		logger->Debug("Accessory command received - raw CAN frame:");
+		logger->HexIn(buffer, 13);
+		logger->Debug("  localID (32-bit): 0x{0}", Utils::Integer::IntegerToHex(localIdRaw));
+
 		Address address;
 		Protocol protocol;
 		LocoType type;
 		ParseAddressProtocol(buffer, address, protocol, type);
 
-		// Log raw local ID sent by CS2 (bytes 5..8) for debugging
-		uint32_t localIdRaw = Utils::Integer::DataBigEndianToInt(buffer + 5);
-		logger->Debug("Accessory command raw localID=0x{0}, buffer5..8={1:02x} {2:02x} {3:02x} {4:02x}",
-			Utils::Integer::IntegerToHex(localIdRaw), buffer[5], buffer[6], buffer[7], buffer[8]);
-		DataModel::AccessoryState state = (buffer[9] ? DataModel::AccessoryStateOn : DataModel::AccessoryStateOff);
+		logger->Debug("  After ParseAddressProtocol: address={0}, protocol={1}",
+			address, Utils::Utils::ProtocolToString(protocol));
+
+		DataModel::AccessoryState state = static_cast<DataModel::AccessoryState>(buffer[9] & 0x03);
+		bool power = (buffer[10] != 0);
+
+		// GUI-address is 1-based, protocol-address is 0-based
 		++address;
+
 		logger->Info(Languages::TextReceivedAccessoryCommand, Utils::Utils::ProtocolToString(protocol), address, state);
-		logger->Debug("Accessory raw: buffer[9]={0}, buffer[10]={1}, address after increment={2}, protocol={3}", buffer[9], buffer[10], address, Utils::Utils::ProtocolToString(protocol));
+		logger->Debug("  Final: address={0}, state={1}, power={2}", address, static_cast<int>(state), power ? 1 : 0);
+
+		// Send response to acknowledge the command (CS2 expects this!)
+		unsigned char response[CANCommandBufferLength];
+		CreateCommandHeader(response, CanCommandAccessory, CanResponseResponse, 6);
+		// Copy the LocalID and state/power from the original command
+		response[5] = buffer[5];
+		response[6] = buffer[6];
+		response[7] = buffer[7];
+		response[8] = buffer[8];
+		response[9] = buffer[9];
+		response[10] = buffer[10];
+		logger->Debug("  Sending accessory response");
+		SendInternal(response);
+
+		// Only process if power is on (CS2 sends power=0 to turn off the accessory coil)
+		if (!power)
+		{
+			logger->Debug("  Ignoring accessory state change with power=0 (coil off)");
+			return;
+		}
+
 		// Use skipInversion=true because cs2.exe sends the logical state as the user sees it
 		manager->AccessoryBaseState(ControlTypeInternal, protocol, address, state, true);
 	}
