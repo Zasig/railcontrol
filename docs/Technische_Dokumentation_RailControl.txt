@@ -1,0 +1,91 @@
+Technische Dokumentation – RailControl (tiefgehende technische Übersicht)
+
+Kurzbeschreibung
+RailControl ist eine C++-Anwendung zur Steuerung von Modellbahn-Anlagen. Ziel ist die zentrale Verwaltung von Lokomotiven, Weichen/Signalen, Rückmeldern und Fahrstraßen sowie die Anbindung unterschiedlicher Digitalzentralen über verschiedene Protokolle.
+
+1. Build, Abhängigkeiten und Start
+- Build-System: CMake (CMakeLists.txt vorhanden). Projekteinstellungen für Visual Studio (CMakeSettings.json) sind verfügbar.
+- Unterstützte Plattformen: Desktop (Windows, Linux, ggf. Raspberry Pi). Compiler: g++, clang, MSVC.
+- Abhängigkeiten: Standard-C++ Bibliotheken, zlib (im Ordner Hardware/zlib vorhanden). Datenbank: SQLite (StorageHandler verwendet Sqlite-Backend).
+- Startparameter: ArgumentHandler verarbeitet CLI-Argumente (Kurz-/Langvarianten, Default-Switch). Konfiguration erfolgt über Datei/CLI/Storage.
+
+2. Repository- und Modulübersicht
+- Wurzelverzeichnis: CMakeLists.txt, Dokumentation, Tools.
+- Wichtige Quellverzeichnisse:
+  - DataModel: Kern-Domänenklassen (Track, Loco, Route, Feedback, Accessory, Signal, Cluster, LayoutItem). Hier sind Serialisierung, Geschäftslogik und Zustandsverwaltung implementiert.
+  - Hardware: Implementierungen für Hardware-Protokolle, Caches (AccessoryCache, FeedbackCache, LocoCache) und Hardware-Parameter.
+  - Server: Netzwerk-Server und Schnittstellen. Unterteilungen: Api, Web, Z21, CS2.
+  - Storage: Persistenzschicht (StorageHandler) - SQLite-basiert.
+  - Logger, Utils: Hilfsklassen, Internationalisierung (Languages).
+
+3. Kernkomponenten und Verantwortlichkeiten
+- Manager (Manager.h / Manager.cpp)
+  - Zentraler Orchestrator. Hält Sammlungen aller Objekte (locos, tracks, feedbacks, accessories, routes, switches, signals, layers).
+  - Zuständig für Lifecycles, Speicherung (via StorageHandler), Veröffentlichung von Zustandsänderungen, Ausführung von Fahrstraßen, Reservierung/Locking von Gleisen.
+  - Startet Hintergrund-Worker: DebounceWorker (Entprellung von Rückmeldern) und ControlCheckerWorker (Überprüfung/Neustart von Controls).
+  - Synchronisation: zahlreiche std::mutex pro Objekt-Map (z.B. trackMutex, locoMutex). Viele öffentliche Methoden sind thread-safe oder verwenden Guards intern.
+
+- DataModel
+  - Track: Repräsentiert ein Gleisfeld mit Feedback-Relationen, Releases, Reservierungen, Extensions und Anzeigeparametern. Wichtige Zustände: trackState, trackStateDelayed, blocked, locoBaseOrientation.
+  - Feedback: Repräsentiert Rückmelder mit invertierbarer Logik. Feedbacks treiben den Automatikbetrieb (Belegtmeldungen).
+  - Loco / LocoBase: Repräsentation von Lokomotiven; enthält Geschwindigkeit, Funktionen, Orientierung und Reservierungslogik.
+  - Accessory / Switch / Signal: Zubehör-Objekte mit Schaltlogik, Invertierung und Position im Gleisbild.
+  - Route: Fahrstraßen mit Relationen (Welche Gleise und Zubehör beim Sperren/Entsperren betroffen sind), Automode-Parameter und Ausführungslogik.
+
+- Hardware & Controls
+  - HardwareParams: Konfiguration einer physischen oder virtuellen Zentrale. Für jede Zentrale wird ein HardwareHandler (ControlInterface) erstellt.
+  - Capabilities: Jede Zentrale meldet unterstützte Fähigkeiten (Loco, Accessory, Feedback usw.).
+  - Protocols: Mehrere Protokolle pro Zentrale möglich (DCC, Märklin, Z21, CAN etc.).
+
+- Server & API
+  - WebServer: Bietet Web-UI und JSON-API. ApiServer/ApiClient implementieren einen minimalen HTTP-Server (siehe Server/Api/ApiServer.cpp, ApiClient.cpp).
+  - API-Endpunkte: /api/v1/booster, /api/v1/status, /api/v1/layers, /api/v1/layout, /api/v1/locos, /api/v1/switches/{id}/toggle, /api/v1/routes, /api/v1/routes/{id}/execute.
+  - Web UI: Ein in ApiClient eingebettetes HTML/JS bedient Gleisbild, Layer-Auswahl, Switch-Toggle und Route-Ausführung (siehe ServeHtmlUI()).
+
+- Storage
+  - StorageHandler (Storage/StorageHandler.*) kapselt Persistenz mit SQLite. Beim Start werden alle Entities geladen (AllTracks, AllLocos, AllFeedbacks etc.) und in Manager-Maps registriert.
+  - Transaktionen: Storage::TransactionGuard wird beim Speichern genutzt.
+
+4. Threading, Concurrency und Eventfluss
+- Manager startet mehrere Threads:
+  - debounceThread: Aggregiert Feedback-Events und reduziert Prell-Effekte bevor diese zu Track-Status-Änderungen werden.
+  - controlCheckerThread: Prüft regelmäßig angemeldete Controls/HW-Handler und setzt ggf. Status/Neustarts.
+  - Pro-Client-Threads: ApiClient erzeugt pro Verbindung einen Thread (clientThread) zur Verarbeitung.
+- Synchronisation:
+  - Für jede Objektmap existiert ein eigenständiger mutex (z.B. trackMutex). Methoden verwenden std::lock_guard für atomare Zugriffe.
+  - Publish- und Update-Pfade halten Locks möglichst kurz, jedoch sind einige Operationen (z.B. RouteExecute) komplex und erfordern Koordination zwischen mehreren Objekten.
+
+5. Netzwerk- und Protokollverarbeitung
+- TCP-Server/Client: Generic Network::TcpServer/TcpConnection ist Grundlage für ApiServer und andere Dienste.
+- Protokollimplementierungen befinden sich unter Hardware/Protocols; zentrale Klasse HardwareHandler/ControlInterface übersetzt Manager-Aufrufe in Hardware-Befehle.
+
+6. Erweiterungspunkte und wie man neue Hardware hinzufügt
+- HardwareParams beschreiben neue Zentrale; Storage speichert Parameter sodass Manager beim Start die Controls lädt und HardwareHandler instanziiert.
+- Neue Protokolle: Implementiere neue Protocol-Klasse/Adapter unter Hardware/Protocols und registriere sie in HardwareParams.
+
+7. Wichtige Dateien / Einstiegspunkte
+- Manager.h / Manager.cpp — zentrale Koordination (Startpunkt der Logik nach Boot)
+- DataModel/*.h / .cpp — Domänenklassen (Track.h, Loco.h, Route.h, Feedback.h, Accessory.h)
+- Server/Api/ApiServer.cpp, ApiClient.cpp — einfache HTTP API und Web-UI
+- Hardware/* — Hardware-Integration, Protokolle
+- Storage/* — Persistenz (SQLite)
+- ArgumentHandler.cpp — CLI-Argumentverarbeitung
+
+8. Logging, Internationalisierung, Tests
+- Logging: Logger::Logger zentral; LogLevel in Storage-Settings konfigurierbar.
+- Sprachen: Languages.* verwaltet UI-Texte; Repository enthält deutsch/englisch/spanisch Dokumentation.
+
+9. Betrieb, Konfiguration und Troubleshooting
+- Konfigurationswerte werden aus Storage (SQLite) geladen; CLI-Argumente können Startverhalten beeinflussen.
+- Häufige Probleme: falsche Feedback-Adressen -> Auto-Add-Feedback in Settings, serielle/TCP-Verbindungsprobleme -> Prüflog der jeweiligen Hardware-Handler.
+
+10. Weiterführende Hinweise für Entwickler
+- Achte auf Lock-Reihenfolgen um Deadlocks zu vermeiden (Manager hält viele mutexes). Halte Locks kurz.
+- Nutze Storage::TransactionGuard beim Schreiben in DB.
+- Für neue API-Endpunkte: ApiClient::HandleRequest erweitern, Server::Api::ApiServer registriert neue Verbindungen automatisch.
+
+Quellen und Dokumentation
+- In-Repository-Dokumentation: Documentation/de, Documentation/en, Documentation/es (z.B. config-accessories.md, automatic.md)
+- Code-Beispiele: Server/Api/ApiClient.cpp (Web-UI/JSON-API), DataModel/Track.h (Gleislogik), Manager.cpp (Lifecycle/Speicher/Worker).
+
+Wenn du spezielle Kapitel detaillierter möchtest (z.B. genaue UML-/Klassendiagramme, Thread-Interaktionen, Datenbank-Schema oder Beispiele für das Hinzufügen einer neuen Zentrale), sag mir bitte welches Thema — ich erweitere die Datei entsprechend.
